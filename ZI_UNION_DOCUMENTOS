@@ -1,0 +1,98 @@
+@AbapCatalog.viewEnhancementCategory: [#NONE]
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@EndUserText.label: 'CDS UNION Documentos'
+@Metadata.ignorePropagatedAnnotations: true
+define view entity ZI_UNION_DOCUMENTOS
+  with parameters
+    p_fiscalyear : gjahr,
+    p_plant      : werks_d
+
+  as select from zinv_documentos      as doc
+
+    inner join   ZI_INV_DELTA_CONTABI as delta on  doc.gjahr <> delta.FiscalYear
+                                               and doc.zeile <> delta.InventoryDocumentItem
+                                               and doc.iblnr <> delta.InventoryDocument
+
+{
+  key 'SELECT 1'                                        as ident,
+  key delta.Bukrs,
+  key delta.InventoryDocument,
+  key delta.InventoryDocumentItem,
+  key delta.FiscalYear,
+      delta.Plant,
+      delta.Almacen,
+      delta.Material,
+      delta.DocumentDate,
+      @Semantics.quantity.unitOfMeasure: 'BaseUnitOfMeasure'
+      delta.Quantity,
+      delta.QuantityZero,
+      delta.BaseUnitOfMeasure,
+      cast(  delta.SyncStatusCode as abap.char ( 15 ) ) as SyncStatusCode,
+      delta.Nameupd,
+      cast(  delta.LastSyncAt as abap.char ( 20 ) )     as LastSyncAt,
+      cast(  delta.DeltaID as abap.char ( 50 ) )        as DeltaID,
+      cast(  delta.ErrorMessage as abap.char ( 256 ) )  as ErrorMessage,
+      delta.DocumentDateConta
+}
+where
+      doc.gjahr = $parameters.p_fiscalyear
+  and doc.werks = $parameters.p_plant
+
+union all
+
+select from zinv_documentos
+
+{
+  key 'SELECT 2'    as ident,
+  key bukrs         as Bukrs,
+  key iblnr         as InventoryDocument,
+  key zeile         as InventoryDocumentItem,
+  key gjahr         as FiscalYear,
+      werks         as Plant,
+      lgort         as Almacen,
+      matnr         as Material,
+      bldat         as DocumentDate,
+      erfmg         as Quantity,
+      xnull         as QuantityZero,
+      meins         as BaseUnitOfMeasure,
+      status        as SyncStatusCode,
+      last_sync_by  as Nameupd,
+      last_sync_at  as LastSyncAt,
+      delta_id      as DeltaId,
+      error_message as ErrorMessage,
+      budat         as DocumentDateConta
+}
+where
+      gjahr = $parameters.p_fiscalyear
+  and werks = $parameters.p_plant
+
+union all
+
+select from       ZI_INV_DELTA_CONTABI as delta
+
+  left outer join zinv_documentos      as doc on  doc.gjahr = $parameters.p_fiscalyear
+                                              and doc.werks = $parameters.p_plant
+
+
+{
+  key 'SELECT 3' as ident,
+  key delta.Bukrs,
+  key delta.InventoryDocument,
+  key delta.InventoryDocumentItem,
+  key delta.FiscalYear,
+      delta.Plant,
+      delta.Almacen,
+      delta.Material,
+      delta.DocumentDate,
+      delta.Quantity,
+      delta.QuantityZero,
+      delta.BaseUnitOfMeasure,
+      delta.SyncStatusCode,
+      delta.Nameupd,
+      delta.LastSyncAt,
+      delta.DeltaID,
+      delta.ErrorMessage,
+      delta.DocumentDateConta
+}
+where
+  doc.budat is null
