@@ -3,7 +3,6 @@
 @UI.headerInfo: { typeName: 'Envío de cierre de inventario', typeNamePlural: 'Envíos de cierre de inventarios' }
 
 define root custom entity ZI_MM_INVENT_CLOSING_SHIP
-
 {
       @UI.facet             : [
       {
@@ -19,20 +18,26 @@ define root custom entity ZI_MM_INVENT_CLOSING_SHIP
       @UI.identification    : [ { position: 10 } ]
       @EndUserText.label    : 'Sociedad'
   key CompanyCode           : bukrs;
+
       @UI.lineItem          : [{ position: 20 }]
       @UI.identification    : [ { position: 20 } ]
       @EndUserText.label    : 'Documento de inventario'
   key InventoryDocument     : iblnr;
-      @UI.lineItem          : [{ position: 30 }]
-      @UI.identification    : [ { position: 30 } ]
-      @EndUserText.label    : 'Posición del documento de inventario'
-  key InventoryDocumentItem : dzeile;
+
+// Campos de posición: la lista muestra solo el documento.
+// El envío a CPI sigue leyendo todas las posiciones en el behavior.
+//      @UI.lineItem          : [{ position: 30 }]
+//      @UI.identification    : [ { position: 30 } ]
+//      @EndUserText.label    : 'Posición del documento de inventario'
+//  key InventoryDocumentItem : dzeile;
+
       @UI.lineItem          : [{ position: 40 }]
       @UI.identification    : [ { position: 40 } ]
       @UI.selectionField    : [{ position: 10 }]
       @Consumption.filter.mandatory: true
       @EndUserText.label    : 'Ejercicio fiscal'
   key FiscalYear            : gjahr;
+
       @UI.lineItem          : [{ position: 50 }]
       @UI.identification    : [ { position: 50 } ]
       @UI.selectionField    : [{ position: 20 }]
@@ -41,51 +46,63 @@ define root custom entity ZI_MM_INVENT_CLOSING_SHIP
       @Consumption.valueHelpDefinition: [{ entity: { name: 'I_Plant', element: 'Plant' } }]
       @EndUserText.label    : 'Centro'
       Plant                 : werks_d;
+
       @UI.lineItem          : [{ position: 60 }]
       @UI.identification    : [ { position: 60 } ]
       @EndUserText.label    : 'Almacén'
       Almacen               : lgort_d;
-      @UI.lineItem          : [{ position: 70 }]
-      @UI.identification    : [ { position: 70 } ]
-      @EndUserText.label    : 'Material'
-      Material              : matnr;
+
+//      @UI.lineItem          : [{ position: 70 }]
+//      @UI.identification    : [ { position: 70 } ]
+//      @EndUserText.label    : 'Material'
+//      Material              : matnr;
+
       @UI.lineItem          : [{ position: 80 }]
       @UI.identification    : [ { position: 80 } ]
       @EndUserText.label    : 'Fecha del documento'
       DocumentDate          : bldat;
-      @UI.lineItem          : [{ position: 90 }]
-      @UI.identification    : [ { position: 90 } ]
-      @EndUserText.label    : 'Cantidad'
-      @Semantics.quantity.unitOfMeasure: 'BaseUnitOfMeasure'
-      Quantity              : erfmg;
-      @UI.lineItem          : [{ position: 100 }]
-      @UI.identification    : [ { position: 100 } ]
-      @EndUserText.label    : 'Cantidad cero'
-      QuantityZero          : abap.char( 01 );
-      @UI.lineItem          : [{ position: 110 }]
-      @UI.identification    : [ { position: 110 } ]
-      @EndUserText.label    : 'Unidad de medida base'
-      BaseUnitOfMeasure     : meins;
+
+//      @UI.lineItem          : [{ position: 90 }]
+//      @UI.identification    : [ { position: 90 } ]
+//      @EndUserText.label    : 'Cantidad'
+//      @Semantics.quantity.unitOfMeasure: 'BaseUnitOfMeasure'
+//      Quantity              : erfmg;
+//
+//      @UI.lineItem          : [{ position: 100 }]
+//      @UI.identification    : [ { position: 100 } ]
+//      @EndUserText.label    : 'Cantidad cero'
+//      QuantityZero          : abap.char( 01 );
+//
+//      @UI.lineItem          : [{ position: 110 }]
+//      @UI.identification    : [ { position: 110 } ]
+//      @EndUserText.label    : 'Unidad de medida base'
+//      BaseUnitOfMeasure     : meins;
+
       @UI.lineItem          : [{ position: 120 }]
       @UI.identification    : [ { position: 120 } ]
       @EndUserText.label    : 'Código de estado de sincronización'
       SyncStatusCode        : zde_status;
+
       @UI.lineItem          : [{ position: 130 }]
       @UI.identification    : [ { position: 130 } ]
       @EndUserText.label    : 'Usuario de actualización'
       Nameupd               : syuname;
+
       @UI.lineItem          : [{ position: 140 }]
       @UI.identification    : [ { position: 140 } ]
       @EndUserText.label    : 'Última sincronización'
       LastSyncAt            : zde_sincro;
+
       @UI.lineItem          : [{ position: 150 }]
       @UI.identification    : [ { position: 150 } ]
       @EndUserText.label    : 'ID de delta'
       DeltaId               : zde_deltaid;
+
       @UI.lineItem          : [{ position: 160 }]
       @UI.identification    : [ { position: 160 } ]
       @EndUserText.label    : 'Mensaje de error'
       ErrorMessage          : zde_log;
+
       @UI.lineItem          : [{ position: 170 }]
       @UI.identification    : [ { position: 170 } ]
       @EndUserText.label    : 'Fecha de contabilización'
