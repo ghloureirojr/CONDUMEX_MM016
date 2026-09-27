@@ -4,7 +4,6 @@ CLASS zcl_inv_clo_cpi DEFINITION
   CREATE PUBLIC .
 
   PUBLIC SECTION.
-    " Estructura para el ALV referenciada a la nueva CDS View Entity
     TYPES: BEGIN OF ty_inventory_alv,
              sel               TYPE char1,
              Bukrs             TYPE zi_inv_delta_contabi-Bukrs,
@@ -24,7 +23,6 @@ CLASS zcl_inv_clo_cpi DEFINITION
              DeltaID           TYPE zi_inv_delta_contabi-DeltaID,
              MenError          TYPE zi_inv_delta_contabi-ErrorMessage,
              DocumentDateConta TYPE zi_inv_delta_contabi-DocumentDateConta,
-
            END OF ty_inventory_alv,
 
            BEGIN OF ty_result,
@@ -44,9 +42,9 @@ CLASS zcl_inv_clo_cpi DEFINITION
       IMPORTING
         !iv_year       TYPE zi_invdoc_soap_ext-fiscalyear
         !iv_plant      TYPE zi_invdoc_soap_ext-plant
-        !iv_status     TYPE char1 " 'X' Contado, ' ' No Contado
+        !iv_status     TYPE char1
       RETURNING
-        VALUE(rv_data) TYPE tt_inventory_alv .
+        VALUE(rv_data) TYPE tt_inventory_alv.
 
     METHODS send_data_to_cpi
       EXPORTING
@@ -57,14 +55,13 @@ CLASS zcl_inv_clo_cpi DEFINITION
       CHANGING
         !it_selected_data TYPE tt_inventory_alv.
 
-protected section.
-private section.
+  PROTECTED SECTION.
+  PRIVATE SECTION.
 ENDCLASS.
 
 
 
-CLASS ZCL_INV_CLO_CPI IMPLEMENTATION.
-
+CLASS zcl_inv_clo_cpi IMPLEMENTATION.
 
   METHOD get_inventory_data.
 
@@ -134,64 +131,6 @@ CLASS ZCL_INV_CLO_CPI IMPLEMENTATION.
           <fs_z>-fechaconta = <fs_cds0>-DocumentDateConta.
         ENDLOOP.
       ENDIF.
-*    ELSE.
-*      SELECT FROM zi_inv_delta_contabi AS a
-*          FIELDS
-*          a~Bukrs,
-*          a~InventoryDocument,
-*          a~InventoryDocumentItem,
-*          a~FiscalYear,
-*          a~Plant,
-*          a~Almacen,
-*          a~Material,
-*          a~DocumentDate,
-*          a~SyncStatusCode,
-*          a~Quantity,
-*          a~QuantityZero,
-*          a~BaseUnitOfMeasure,
-*          a~Status,
-*          a~DeltaID,
-*          a~ErrorMessage,
-*          a~LastSyncAt,
-*          a~Nameupd,
-*          a~DocumentDateConta,
-*          a~fechaconteo
-*                   FOR ALL ENTRIES IN @lt_zdocumentos_exist
-*              WHERE fiscalyear NE @lt_zdocumentos_exist-gjahr
-*                AND  inventorydocumentitem     NE @lt_zdocumentos_exist-zeile
-*                AND  inventorydocument     NE @lt_zdocumentos_exist-iblnr
-**          AND  quantity     NE @lt_zdocumentos_exist-erfmg
-**          AND  status NE @lt_zdocumentos_exist-status
-*              INTO TABLE @DATA(lt_db_results0).
-*
-*      IF lt_db_results0 IS NOT INITIAL.
-*
-*        LOOP AT lt_db_results0 ASSIGNING FIELD-SYMBOL(<fs_cds00>).
-*
-*          APPEND INITIAL LINE TO lt_zdocumentos_exist ASSIGNING FIELD-SYMBOL(<fs_z0>).
-*
-*          <fs_z0>-bukrs = <fs_cds00>-Bukrs.
-*          <fs_z0>-iblnr = <fs_cds00>-inventorydocument.
-*          <fs_z0>-zeile = <fs_cds00>-inventorydocumentitem.
-*          <fs_z0>-gjahr = <fs_cds00>-fiscalyear.
-*          <fs_z0>-werks = <fs_cds00>-plant.
-*          <fs_z0>-lgort = <fs_cds00>-almacen.
-*          <fs_z0>-matnr = <fs_cds00>-material.
-*          <fs_z0>-budat = <fs_cds00>-documentdate.
-*          <fs_z0>-status = <fs_cds00>-syncstatuscode.
-*          <fs_z0>-erfmg = <fs_cds00>-quantity.
-*          <fs_z0>-xnull = <fs_cds00>-quantityzero.
-*          <fs_z0>-meins = <fs_cds00>-baseunitofmeasure.
-*          <fs_z0>-status = <fs_cds00>-status.
-*          <fs_z0>-delta_id = <fs_cds00>-deltaid.
-*          <fs_z0>-error_message = <fs_cds00>-errormessage.
-*          <fs_z0>-last_sync_at = <fs_cds00>-lastsyncat.
-*          <fs_z0>-last_sync_by = <fs_cds00>-nameupd.
-*          <fs_z0>-fechaconteo = <fs_cds00>-fechaconteo.
-*          <fs_z0>-fechaconta = <fs_cds00>-DocumentDateConta.
-*
-*        ENDLOOP.
-*      ENDIF.
     ENDIF.
 
     SORT lt_zdocumentos_exist BY iblnr gjahr zeile.
@@ -242,204 +181,146 @@ CLASS ZCL_INV_CLO_CPI IMPLEMENTATION.
       IF sy-subrc = 0.
         COMMIT WORK.
       ELSE.
-        ROLLBACK WORK. "
+        ROLLBACK WORK.
       ENDIF.
     ENDIF.
   ENDMETHOD.
 
 
   METHOD send_data_to_cpi.
-    DATA: lo_proxy         TYPE REF TO zcoco_servicio_cierre_port_typ,
-          ls_request       TYPE zcosolicitar_cierre_input,
-          ls_response      TYPE zcosolicitar_cierre_output,
-          lo_sys_exception TYPE REF TO cx_ai_system_fault.
+    DATA: lo_proxy          TYPE REF TO zcoco_servicio_cierre_port_typ,
+          ls_request        TYPE zcosolicitar_cierre_input,
+          ls_response       TYPE zcosolicitar_cierre_output,
+          lo_sys_exception  TYPE REF TO cx_ai_system_fault,
+          lx_uuid           TYPE REF TO cx_uuid_error,
+          lt_selected_items TYPE tt_inventory_alv,
+          ls_zinv           TYPE zinv_documentos,
+          lv_timestamp_iso  TYPE string,
+          lv_uuid           TYPE sysuuid_c32,
+          lv_ok             TYPE abap_bool,
+          lv_message        TYPE string.
 
-    DATA: lt_selected_items TYPE tt_inventory_alv,
-          lt_zinv_update    TYPE TABLE OF zinv_documentos,
-          ls_zinv           TYPE zinv_documentos.
+    FIELD-SYMBOLS: <fs_doc> TYPE ty_inventory_alv.
 
-    FIELD-SYMBOLS : <fs_result> TYPE ty_result,
-                    <fs_doc>    TYPE ty_inventory_alv.
+    CLEAR: t_zinv_update, t_result, ev_success, ev_message.
 
-*    ev_success = abap_false.
     lt_selected_items = CORRESPONDING #( it_selected_data ).
 
-*    IF lines( lt_selected_items ) = 0.
-*      ev_message = 'No se han seleccionado posiciones para enviar.'.
-*      RETURN.
-*    ENDIF.
-    " Centralizar TimeStamp
     GET TIME STAMP FIELD DATA(lv_timestamp).
-    DATA(lv_timestamp_iso) = |{ lv_timestamp TIMESTAMP = ISO }|.
+    lv_timestamp_iso = |{ lv_timestamp TIMESTAMP = ISO }|.
 
-    " Instanciar proxy una sola vez
     TRY.
         lo_proxy = NEW zcoco_servicio_cierre_port_typ( logical_port_name = 'ZLP_TRM_PROP_PAGO_CPI' ).
       CATCH cx_ai_system_fault INTO lo_sys_exception.
-*        ev_message = |Error inicializando proxy: { lo_sys_exception->get_text( ) }|.
+        lv_message = |Error inicializando proxy: { lo_sys_exception->get_text( ) }|.
         LOOP AT lt_selected_items ASSIGNING <fs_doc>.
-          APPEND INITIAL LINE TO t_result ASSIGNING <fs_result>.
-          <fs_result>-companycode = <fs_doc>-bukrs.
-          <fs_result>-inventorydocument = <fs_doc>-inventorydocument.
-          <fs_result>-inventorydocumentitem = <fs_doc>-item.
-          <fs_result>-fiscalyear  = <fs_doc>-fiscalyear.
-          <fs_result>-success = abap_false.
-          <fs_result>-message = |Error inicializando proxy: { lo_sys_exception->get_text( ) }|.
-
+          APPEND VALUE #(
+            companycode           = <fs_doc>-bukrs
+            inventorydocument     = <fs_doc>-inventorydocument
+            inventorydocumentitem = <fs_doc>-item
+            fiscalyear            = <fs_doc>-fiscalyear
+            success               = abap_false
+            message               = lv_message
+          ) TO t_result.
         ENDLOOP.
+        ev_message = lv_message.
         RETURN.
     ENDTRY.
 
-
-
-    " Lógica: Agrupar por documento (Un Request SOAP por Documento de Inventario)
     LOOP AT lt_selected_items ASSIGNING <fs_doc>
-                              GROUP BY ( bukrs             = <fs_doc>-bukrs
-                                         plant             = <fs_doc>-plant
-                                         inventorydocument = <fs_doc>-inventorydocument )
-                              ASSIGNING FIELD-SYMBOL(<fs_group>).
+      GROUP BY ( bukrs             = <fs_doc>-bukrs
+                 plant             = <fs_doc>-plant
+                 inventorydocument = <fs_doc>-inventorydocument
+                 fiscalyear        = <fs_doc>-fiscalyear )
+      ASSIGNING FIELD-SYMBOL(<fs_group>).
 
-      CLEAR ls_request.
+      CLEAR: ls_request, ls_response, lv_uuid, lx_uuid.
 
       TRY.
-          DATA(lv_uuid) = cl_system_uuid=>create_uuid_c32_static( ).
-        CATCH cx_uuid_error INTO DATA(lx_uuid).
-          DATA(ev_estatus) = 'Error'.
-          DATA(ev_error_msg) = lx_uuid->get_longtext(  ).
+          lv_uuid = cl_system_uuid=>create_uuid_c32_static( ).
+        CATCH cx_uuid_error INTO lx_uuid.
+          lv_message = lx_uuid->get_longtext( ).
+          LOOP AT GROUP <fs_group> ASSIGNING <fs_doc>.
+            APPEND VALUE #(
+              companycode           = <fs_doc>-bukrs
+              inventorydocument     = <fs_doc>-inventorydocument
+              inventorydocumentitem = <fs_doc>-item
+              fiscalyear            = <fs_doc>-fiscalyear
+              success               = abap_false
+              message               = lv_message
+            ) TO t_result.
+          ENDLOOP.
+          CONTINUE.
       ENDTRY.
 
+      ls_request-encabezado-id_solicitud          = lv_uuid.
+      ls_request-encabezado-tipo_archivo          = 'Cierre'.
+      ls_request-encabezado-sociedad              = <fs_group>-bukrs.
+      ls_request-encabezado-no_documento_sap      = <fs_group>-inventorydocument.
+      ls_request-encabezado-centro                = <fs_group>-plant.
+      ls_request-encabezado-fecha_hora_cierre_doc = lv_timestamp_iso.
+      ls_request-encabezado-cierre_documento      = '1'.
 
+      lv_ok = abap_false.
 
-      " Llenar Cabecera
-      ls_request-encabezado-id_solicitud  = lv_uuid.
-      ls_request-encabezado-tipo_archivo      = 'Cierre'.
-      ls_request-encabezado-sociedad          = <fs_group>-bukrs.
-      ls_request-encabezado-no_documento_sap  = <fs_group>-inventorydocument.
-      ls_request-encabezado-centro  = <fs_group>-plant.
-      ls_request-encabezado-fecha_hora_cierre_doc  = lv_timestamp_iso.
-      ls_request-encabezado-cierre_documento = '1'.
-
-
-      " Enviar mensaje SOAP
       TRY.
           lo_proxy->solicitar_cierre(
-            EXPORTING
-              input  = ls_request
-            IMPORTING
-              output = ls_response ).
+            EXPORTING input  = ls_request
+            IMPORTING output = ls_response ).
 
           IF ls_response-id_solicitud = '200'.
-
-            READ TABLE lt_selected_items ASSIGNING <fs_doc> WITH KEY InventoryDocument = <fs_group>-inventorydocument.
-            IF sy-subrc = 0.
-
-              <fs_doc>-deltaid = lv_uuid.
-              <fs_doc>-syncstatuscode = 'Envío exitoso a CPI'.
-*              ev_success = abap_true.
-              " Preparar actualización log - Éxito
-              ls_zinv = VALUE #(
-
-                               bukrs = <fs_doc>-bukrs
-                               iblnr         = <fs_group>-inventorydocument
-                               gjahr         = sy-datum(4)
-                               werks = <fs_doc>-plant
-                               lgort = <fs_doc>-almacen
-                               matnr = <fs_doc>-material
-                               bldat = <fs_doc>-documentdate
-                               erfmg = <fs_doc>-quantity
-                               meins = <fs_doc>-baseunitofmeasure
-                               zeile         =  <fs_doc>-item
-                               delta_id      = lv_uuid
-                               status       = 'SEND'
-                               last_sync_at  = lv_timestamp_iso
-                               last_sync_by  = sy-uname
-                               error_message =  ls_response-mensaje
-                                ).
-              APPEND ls_zinv TO lt_zinv_update.
-*              ev_success = abap_true.
-*              ev_message = 'Envío exitoso a CPI'.
-              <fs_doc>-menerror =  ev_message.
-              APPEND INITIAL LINE TO t_result ASSIGNING <fs_result>.
-              <fs_result>-companycode = <fs_doc>-bukrs.
-              <fs_result>-inventorydocument = <fs_doc>-inventorydocument.
-              <fs_result>-inventorydocumentitem = <fs_doc>-item.
-              <fs_result>-fiscalyear  = <fs_doc>-fiscalyear.
-              <fs_result>-success = abap_true.
-              <fs_result>-message = 'Envío exitoso a CPI'.
-*              MODIFY zinv_documentos FROM ls_zinv.
-
-            ELSE.
-              LOOP AT lt_selected_items ASSIGNING <fs_doc> WHERE InventoryDocument = <fs_group>-inventorydocument.
-                ls_zinv = VALUE #(
-                                     bukrs = <fs_doc>-bukrs
-                                     iblnr         = <fs_group>-inventorydocument
-                                     gjahr         = sy-datum(4)
-                                     werks = <fs_doc>-plant
-                                     lgort = <fs_doc>-almacen
-                                     matnr = <fs_doc>-material
-                                     bldat = <fs_doc>-documentdate
-                                     erfmg = <fs_doc>-quantity
-                                     meins = <fs_doc>-baseunitofmeasure
-                                     zeile         =  <fs_doc>-item
-                                     delta_id      = lv_uuid
-                                     status        = 'NOTSENT'
-                                     last_sync_at  = lv_timestamp_iso
-                                     last_sync_by  = sy-uname
-                                     error_message = ls_response-mensaje
-                                     ).
-                <fs_doc>-menerror = ev_message.
-                APPEND ls_zinv TO lt_zinv_update.
-*                ev_success = abap_false.
-*                ev_message = |Error de sistema/SOAP en doc { <fs_group>-inventorydocument }|.
-                APPEND INITIAL LINE TO t_result ASSIGNING <fs_result>.
-                <fs_result>-companycode = <fs_doc>-bukrs.
-                <fs_result>-inventorydocument = <fs_doc>-inventorydocument.
-                <fs_result>-inventorydocumentitem = <fs_doc>-item.
-                <fs_result>-fiscalyear  = <fs_doc>-fiscalyear.
-                <fs_result>-success = abap_false.
-                <fs_result>-message = |Error de sistema/SOAP en doc { <fs_group>-inventorydocument }|.
-
-*                MODIFY zinv_documentos FROM ls_zinv.
-              ENDLOOP.
-              "READ TABLE lt_selected_items ASSIGNING <fs_doc> WITH KEY InventoryDocument = <fs_group>-inventorydocument.
-            ENDIF.
+            lv_ok = abap_true.
+            lv_message = 'Envío exitoso a CPI'.
+          ELSEIF ls_response-mensaje IS NOT INITIAL.
+            lv_message = ls_response-mensaje.
+          ELSE.
+            lv_message = |Respuesta CPI distinta de 200 en doc { <fs_group>-inventorydocument }|.
           ENDIF.
-        CATCH cx_ai_system_fault INTO lo_sys_exception.
-          LOOP AT lt_selected_items ASSIGNING <fs_doc> WHERE InventoryDocument = <fs_group>-inventorydocument.
-            <fs_doc>-deltaid = lv_uuid.
-            <fs_doc>-syncstatuscode = 'NOTSENT'.
-            ls_zinv = VALUE #(
-            bukrs = <fs_doc>-bukrs
 
-                               iblnr         = <fs_group>-inventorydocument
-                               gjahr         = sy-datum(4)
-                               werks = <fs_doc>-plant
-                               lgort = <fs_doc>-almacen
-                               matnr = <fs_doc>-material
-                               bldat = <fs_doc>-documentdate
-                               erfmg = <fs_doc>-quantity
-                               meins = <fs_doc>-baseunitofmeasure
-                               zeile         =  <fs_doc>-item
-                               delta_id      = lv_uuid
-                               status        = 'NOTSENT'
-                               last_sync_at  = lv_timestamp_iso
-                               last_sync_by  = sy-uname
-                               error_message = lo_sys_exception->get_text( )
-                               ).
-            <fs_doc>-menerror = ev_message.
-*            MODIFY zinv_documentos FROM ls_zinv.
-          ENDLOOP.
-*          ev_success = abap_false.
-*          ev_message = |Error de sistema/SOAP en doc { <fs_group>-inventorydocument }|.
-          APPEND INITIAL LINE TO t_result ASSIGNING <fs_result>.
-          <fs_result>-companycode = <fs_doc>-bukrs.
-          <fs_result>-inventorydocument = <fs_doc>-inventorydocument.
-          <fs_result>-inventorydocumentitem = <fs_doc>-item.
-          <fs_result>-fiscalyear  = <fs_doc>-fiscalyear.
-          <fs_result>-success = abap_false.
-          <fs_result>-message = |Error de sistema/SOAP en doc { <fs_group>-inventorydocument }|.
+        CATCH cx_ai_system_fault INTO lo_sys_exception.
+          lv_ok = abap_false.
+          lv_message = |Error de sistema/SOAP en doc { <fs_group>-inventorydocument }: { lo_sys_exception->get_text( ) }|.
       ENDTRY.
+
+      LOOP AT GROUP <fs_group> ASSIGNING <fs_doc>.
+        <fs_doc>-deltaid = lv_uuid.
+        <fs_doc>-syncstatuscode = COND #( WHEN lv_ok = abap_true THEN 'Envío exitoso a CPI' ELSE 'NOTSENT' ).
+        <fs_doc>-menerror = lv_message.
+
+        ls_zinv = VALUE #(
+          bukrs         = <fs_doc>-bukrs
+          iblnr         = <fs_doc>-inventorydocument
+          gjahr         = <fs_doc>-fiscalyear
+          zeile         = <fs_doc>-item
+          werks         = <fs_doc>-plant
+          lgort         = <fs_doc>-almacen
+          matnr         = <fs_doc>-material
+          bldat         = <fs_doc>-documentdate
+          budat         = <fs_doc>-documentdateconta
+          erfmg         = <fs_doc>-quantity
+          xnull         = <fs_doc>-quantityzero
+          meins         = <fs_doc>-baseunitofmeasure
+          delta_id      = lv_uuid
+          status        = COND #( WHEN lv_ok = abap_true THEN 'SEND' ELSE 'NOTSENT' )
+          last_sync_at  = lv_timestamp_iso
+          last_sync_by  = sy-uname
+          error_message = lv_message
+        ).
+        APPEND ls_zinv TO t_zinv_update.
+
+        APPEND VALUE #(
+          companycode           = <fs_doc>-bukrs
+          inventorydocument     = <fs_doc>-inventorydocument
+          inventorydocumentitem = <fs_doc>-item
+          fiscalyear            = <fs_doc>-fiscalyear
+          success               = lv_ok
+          message               = lv_message
+        ) TO t_result.
+      ENDLOOP.
     ENDLOOP.
+
     it_selected_data = CORRESPONDING #( lt_selected_items ).
+    ev_success = xsdbool( NOT line_exists( t_result[ success = abap_false ] ) ).
+    ev_message = COND #( WHEN ev_success = abap_true THEN 'Envío exitoso a CPI' ELSE 'Envío con errores' ).
   ENDMETHOD.
 ENDCLASS.
