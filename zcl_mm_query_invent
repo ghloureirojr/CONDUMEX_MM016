@@ -1,0 +1,177 @@
+CLASS zcl_mm_query_invent DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_rap_query_provider .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+    METHODS get_filter_low
+      IMPORTING it_pairs      TYPE if_rap_query_filter=>tt_name_range_pairs
+                iv_name       TYPE string
+      RETURNING VALUE(rv_low) TYPE string.
+ENDCLASS.
+
+
+
+CLASS zcl_mm_query_invent IMPLEMENTATION.
+
+  METHOD get_filter_low.
+    rv_low = VALUE #( it_pairs[ name = iv_name ]-range[ 1 ]-low DEFAULT '' ).
+  ENDMETHOD.
+
+  METHOD if_rap_query_provider~select.
+
+    DATA: lt_result TYPE STANDARD TABLE OF zi_mm_invent_closing_ship.
+
+    FIELD-SYMBOLS: <fs_result> TYPE zi_mm_invent_closing_ship.
+
+    TRY.
+
+        TRY.
+            " Read Filters
+            DATA(lt_pairs) = io_request->get_filter( )->get_as_ranges( ).
+          CATCH  cx_rap_query_filter_no_range INTO DATA(lx_filter).
+        ENDTRY.
+
+        DATA(lv_fiscalyear) = CONV gjahr( get_filter_low( it_pairs = lt_pairs iv_name = 'FISCALYEAR' ) ).
+        DATA(lv_plant)       = CONV werks_d( get_filter_low( it_pairs = lt_pairs iv_name = 'PLANT' ) ).
+        DATA(lv_CompanyCode) = CONV bukrs( get_filter_low( it_pairs = lt_pairs iv_name = 'COMPANYCODE' ) ).
+        DATA(lv_InventoryDocument) = CONV iblnr( get_filter_low( it_pairs = lt_pairs iv_name = 'INVENTORYDOCUMENT' ) ).
+        DATA(lv_InventoryDocumentItem) = CONV dzeile( get_filter_low( it_pairs = lt_pairs iv_name = 'INVENTORYDOCUMENTITEM' ) ).
+
+        IF lv_plant IS NOT INITIAL.
+
+          SELECT *
+          FROM zi_union_documentos( p_fiscalyear = @lv_fiscalyear, p_plant = @lv_plant )
+          INTO TABLE @DATA(lt_union_documentos).
+
+          LOOP AT lt_union_documentos INTO DATA(lwa_union_documentos).
+            APPEND INITIAL LINE TO lt_result ASSIGNING <fs_result>.
+
+            <fs_result>-CompanyCode = lwa_union_documentos-Bukrs.
+            <fs_result>-InventoryDocument = lwa_union_documentos-InventoryDocument.
+            <fs_result>-InventoryDocumentItem = lwa_union_documentos-InventoryDocumentItem.
+            <fs_result>-FiscalYear = lwa_union_documentos-FiscalYear.
+            <fs_result>-Almacen = lwa_union_documentos-Almacen.
+            <fs_result>-Material = lwa_union_documentos-Material.
+            <fs_result>-DocumentDate = lwa_union_documentos-DocumentDate.
+            <fs_result>-Quantity = lwa_union_documentos-Quantity.
+            <fs_result>-QuantityZero = lwa_union_documentos-QuantityZero.
+            <fs_result>-BaseUnitOfMeasure = lwa_union_documentos-BaseUnitOfMeasure.
+            <fs_result>-SyncStatusCode = lwa_union_documentos-SyncStatusCode.
+            <fs_result>-Nameupd = lwa_union_documentos-Nameupd.
+            <fs_result>-LastSyncAt = lwa_union_documentos-LastSyncAt.
+            <fs_result>-DeltaID = lwa_union_documentos-DeltaID.
+            <fs_result>-ErrorMessage = lwa_union_documentos-ErrorMessage.
+            <fs_result>-DocumentDateConta = lwa_union_documentos-DocumentDateConta.
+
+          ENDLOOP.
+
+        ELSE.
+
+          SELECT *
+          FROM zinv_documentos
+          WHERE bukrs = @lv_CompanyCode
+            AND iblnr = @lv_InventoryDocument
+            AND zeile = @lv_InventoryDocumentItem
+            AND gjahr = @lv_fiscalyear
+            INTO TABLE @DATA(LT_zinv_documentos).
+
+          IF lt_zinv_documentos IS INITIAL.
+
+            SELECT *
+            FROM zi_inv_delta_contabi
+            WHERE bukrs = @lv_CompanyCode
+            AND InventoryDocument = @lv_InventoryDocument
+            AND InventoryDocumentItem = @lv_InventoryDocumentItem
+            AND fiscalyear = @lv_fiscalyear
+            INTO TABLE @DATA(lt_zi_inv_delta_contabi).
+
+            LOOP AT lt_zi_inv_delta_contabi INTO DATA(lwa_zi_inv_delta_contabi).
+              APPEND INITIAL LINE TO lt_result ASSIGNING <fs_result>.
+
+              <fs_result>-CompanyCode = lwa_zi_inv_delta_contabi-bukrs.
+              <fs_result>-InventoryDocument = lwa_zi_inv_delta_contabi-InventoryDocument.
+              <fs_result>-InventoryDocumentItem = lwa_zi_inv_delta_contabi-InventoryDocumentItem.
+              <fs_result>-FiscalYear = lwa_zi_inv_delta_contabi-FiscalYear.
+              <fs_result>-Almacen = lwa_zi_inv_delta_contabi-Almacen.
+              <fs_result>-Material = lwa_zi_inv_delta_contabi-Material.
+              <fs_result>-DocumentDate = lwa_zi_inv_delta_contabi-DocumentDate.
+              <fs_result>-Quantity = lwa_zi_inv_delta_contabi-Quantity.
+              <fs_result>-QuantityZero = lwa_zi_inv_delta_contabi-QuantityZero.
+              <fs_result>-BaseUnitOfMeasure = lwa_zi_inv_delta_contabi-BaseUnitOfMeasure.
+              <fs_result>-SyncStatusCode = lwa_zi_inv_delta_contabi-SyncStatusCode.
+              <fs_result>-Nameupd = lwa_zi_inv_delta_contabi-Nameupd.
+              <fs_result>-LastSyncAt = lwa_zi_inv_delta_contabi-LastSyncAt.
+              <fs_result>-DeltaID = lwa_zi_inv_delta_contabi-DeltaID.
+              <fs_result>-ErrorMessage = lwa_zi_inv_delta_contabi-ErrorMessage.
+              <fs_result>-DocumentDateConta = lwa_zi_inv_delta_contabi-DocumentDateConta.
+
+            ENDLOOP.
+
+          ELSE.
+
+            LOOP AT lt_zinv_documentos INTO DATA(lwa_zinv_documentos).
+              APPEND INITIAL LINE TO lt_result ASSIGNING <fs_result>.
+
+              <fs_result>-CompanyCode = lwa_zinv_documentos-bukrs.
+              <fs_result>-InventoryDocument = lwa_zinv_documentos-iblnr.
+              <fs_result>-InventoryDocumentItem = lwa_zinv_documentos-zeile.
+              <fs_result>-FiscalYear = lwa_zinv_documentos-gjahr.
+              <fs_result>-Almacen = lwa_zinv_documentos-lgort.
+              <fs_result>-Material = lwa_zinv_documentos-matnr.
+              <fs_result>-DocumentDate = lwa_zinv_documentos-bldat.
+              <fs_result>-Quantity = lwa_zinv_documentos-erfmg.
+              <fs_result>-QuantityZero = lwa_zinv_documentos-xnull.
+              <fs_result>-BaseUnitOfMeasure = lwa_zinv_documentos-meins.
+              <fs_result>-SyncStatusCode = lwa_zinv_documentos-status.
+              <fs_result>-Nameupd = lwa_zinv_documentos-last_sync_by.
+              <fs_result>-LastSyncAt = lwa_zinv_documentos-last_sync_at.
+              <fs_result>-DeltaID = lwa_zinv_documentos-delta_id.
+              <fs_result>-ErrorMessage = lwa_zinv_documentos-error_message.
+              <fs_result>-DocumentDateConta = lwa_zinv_documentos-budat.
+
+            ENDLOOP.
+
+          ENDIF.
+
+        ENDIF.
+        DATA: lt_page   LIKE lt_result.
+
+        IF io_request->is_total_numb_of_rec_requested( ).
+          io_response->set_total_number_of_records( CONV int8( lines( lt_result ) ) ).
+        ENDIF.
+
+        DATA(lo_paging)    = io_request->get_paging( ).
+        DATA(lv_offset)    = lo_paging->get_offset( ).
+        DATA(lv_page_size) = lo_paging->get_page_size( ).
+
+        IF lv_offset > 0 OR lv_page_size <> if_rap_query_paging=>page_size_unlimited.
+
+          LOOP AT lt_result INTO DATA(ls_page) FROM lv_offset + 1.
+            APPEND ls_page TO lt_page.
+            IF lv_page_size <> if_rap_query_paging=>page_size_unlimited
+               AND lines( lt_page ) >= lv_page_size.
+              EXIT.
+            ENDIF.
+          ENDLOOP.
+          lt_result = lt_page.
+        ENDIF.
+
+        io_response->set_data( lt_result ).
+      CATCH zcx_mm_pullactive_exception INTO DATA(lx_error).
+        IF io_request->is_data_requested( ).
+          io_response->set_data( lt_result ).
+        ENDIF.
+
+        IF io_request->is_total_numb_of_rec_requested( ).
+          io_response->set_total_number_of_records( 0 ).
+        ENDIF.
+
+    ENDTRY.
+
+  ENDMETHOD.
+ENDCLASS.
