@@ -1,0 +1,200 @@
+CLASS lcl_buffer DEFINITION CREATE PRIVATE.
+  PUBLIC SECTION.
+
+    CLASS-DATA: gt_zinv_update TYPE TABLE OF zinv_documentos WITH DEFAULT KEY.
+ENDCLASS.
+
+CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP DEFINITION INHERITING FROM cl_abap_behavior_handler.
+  PRIVATE SECTION.
+
+    METHODS get_instance_authorizations FOR INSTANCE AUTHORIZATION
+      IMPORTING keys REQUEST requested_authorizations FOR zi_mm_invent_closing_ship RESULT result.
+
+    METHODS read FOR READ
+      IMPORTING keys FOR READ zi_mm_invent_closing_ship RESULT result.
+
+    METHODS lock FOR LOCK
+      IMPORTING keys FOR LOCK zi_mm_invent_closing_ship.
+
+    METHODS sendcpi FOR MODIFY
+      IMPORTING keys FOR ACTION zi_mm_invent_closing_ship~sendcpi.
+
+ENDCLASS.
+
+CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
+
+  METHOD get_instance_authorizations.
+  ENDMETHOD.
+
+  METHOD read.
+    FIELD-SYMBOLS: <fs_result> TYPE STRUCTURE FOR READ RESULT zi_mm_invent_closing_ship.
+
+    SELECT *
+      FROM zinv_documentos
+      FOR ALL ENTRIES IN @keys
+      WHERE bukrs = @keys-CompanyCode
+        AND iblnr = @keys-InventoryDocument
+        AND zeile = @keys-InventoryDocumentItem
+        AND gjahr = @keys-fiscalyear
+        INTO TABLE @DATA(LT_zinv_documentos).
+
+    IF lt_zinv_documentos IS INITIAL.
+      SELECT *
+        FROM zi_inv_delta_contabi
+        FOR ALL ENTRIES IN @keys
+        WHERE bukrs = @keys-CompanyCode
+          AND InventoryDocument = @keys-InventoryDocument
+          AND InventoryDocumentItem = @keys-InventoryDocumentItem
+          AND fiscalyear = @keys-fiscalyear
+          INTO TABLE @DATA(lt_zi_inv_delta_contabi).
+
+      LOOP AT lt_zi_inv_delta_contabi INTO DATA(lwa_zi_inv_delta_contabi).
+        APPEND INITIAL LINE TO result ASSIGNING <fs_result>.
+        <fs_result>-CompanyCode           = lwa_zi_inv_delta_contabi-bukrs.
+        <fs_result>-InventoryDocument     = lwa_zi_inv_delta_contabi-InventoryDocument.
+        <fs_result>-InventoryDocumentItem = lwa_zi_inv_delta_contabi-InventoryDocumentItem.
+        <fs_result>-FiscalYear            = lwa_zi_inv_delta_contabi-FiscalYear.
+        <fs_result>-Almacen               = lwa_zi_inv_delta_contabi-Almacen.
+        <fs_result>-Material              = lwa_zi_inv_delta_contabi-Material.
+        <fs_result>-DocumentDate          = lwa_zi_inv_delta_contabi-DocumentDate.
+        <fs_result>-Quantity              = lwa_zi_inv_delta_contabi-Quantity.
+        <fs_result>-QuantityZero          = lwa_zi_inv_delta_contabi-QuantityZero.
+        <fs_result>-BaseUnitOfMeasure     = lwa_zi_inv_delta_contabi-BaseUnitOfMeasure.
+        <fs_result>-SyncStatusCode        = lwa_zi_inv_delta_contabi-SyncStatusCode.
+        <fs_result>-Nameupd               = lwa_zi_inv_delta_contabi-Nameupd.
+        <fs_result>-LastSyncAt            = lwa_zi_inv_delta_contabi-LastSyncAt.
+        <fs_result>-DeltaID               = lwa_zi_inv_delta_contabi-DeltaID.
+        <fs_result>-ErrorMessage          = lwa_zi_inv_delta_contabi-ErrorMessage.
+        <fs_result>-DocumentDateConta     = lwa_zi_inv_delta_contabi-DocumentDateConta.
+      ENDLOOP.
+    ELSE.
+      LOOP AT lt_zinv_documentos INTO DATA(lwa_zinv_documentos).
+        APPEND INITIAL LINE TO result ASSIGNING <fs_result>.
+        <fs_result>-CompanyCode           = lwa_zinv_documentos-bukrs.
+        <fs_result>-InventoryDocument     = lwa_zinv_documentos-iblnr.
+        <fs_result>-InventoryDocumentItem = lwa_zinv_documentos-zeile.
+        <fs_result>-FiscalYear            = lwa_zinv_documentos-gjahr.
+        <fs_result>-Almacen               = lwa_zinv_documentos-lgort.
+        <fs_result>-Material              = lwa_zinv_documentos-matnr.
+        <fs_result>-DocumentDate          = lwa_zinv_documentos-bldat.
+        <fs_result>-Quantity              = lwa_zinv_documentos-erfmg.
+        <fs_result>-QuantityZero          = lwa_zinv_documentos-xnull.
+        <fs_result>-BaseUnitOfMeasure     = lwa_zinv_documentos-meins.
+        <fs_result>-SyncStatusCode        = lwa_zinv_documentos-status.
+        <fs_result>-Nameupd               = lwa_zinv_documentos-last_sync_by.
+        <fs_result>-LastSyncAt            = lwa_zinv_documentos-last_sync_at.
+        <fs_result>-DeltaID               = lwa_zinv_documentos-delta_id.
+        <fs_result>-ErrorMessage          = lwa_zinv_documentos-error_message.
+        <fs_result>-DocumentDateConta     = lwa_zinv_documentos-budat.
+      ENDLOOP.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD lock.
+  ENDMETHOD.
+
+  METHOD sendCPI.
+    DATA: gr_handler TYPE REF TO zcl_inv_clo_cpi,
+          lt_data    TYPE zcl_inv_clo_cpi=>tt_inventory_alv.
+
+    READ ENTITIES OF zi_mm_invent_closing_ship IN LOCAL MODE
+        ENTITY zi_mm_invent_closing_ship
+        ALL FIELDS WITH CORRESPONDING #( keys )
+        RESULT DATA(lt_invent_closing_ship).
+
+    LOOP AT lt_invent_closing_ship INTO DATA(lwa_invent_closing_ship).
+      APPEND INITIAL LINE TO lt_data ASSIGNING FIELD-SYMBOL(<fs_data>).
+      <fs_data>-bukrs             = lwa_invent_closing_ship-CompanyCode.
+      <fs_data>-inventorydocument = lwa_invent_closing_ship-InventoryDocument.
+      <fs_data>-item              = lwa_invent_closing_ship-InventoryDocumentItem.
+      <fs_data>-almacen           = lwa_invent_closing_ship-Almacen.
+      <fs_data>-fiscalyear        = lwa_invent_closing_ship-FiscalYear.
+      <fs_data>-material          = lwa_invent_closing_ship-Material.
+      <fs_data>-documentdate      = lwa_invent_closing_ship-DocumentDate.
+      <fs_data>-quantity          = lwa_invent_closing_ship-Quantity.
+      <fs_data>-quantityzero      = lwa_invent_closing_ship-QuantityZero.
+      <fs_data>-baseunitofmeasure = lwa_invent_closing_ship-BaseUnitOfMeasure.
+      <fs_data>-SyncStatusCode    = lwa_invent_closing_ship-SyncStatusCode.
+      <fs_data>-Nameupd           = lwa_invent_closing_ship-Nameupd.
+      <fs_data>-LastSyncAt        = lwa_invent_closing_ship-LastSyncAt.
+      <fs_data>-DeltaID           = lwa_invent_closing_ship-DeltaId.
+      <fs_data>-menerror          = lwa_invent_closing_ship-ErrorMessage.
+      <fs_data>-DocumentDateConta = lwa_invent_closing_ship-DocumentDateConta.
+    ENDLOOP.
+
+    CREATE OBJECT gr_handler.
+
+    gr_handler->send_data_to_cpi(
+        IMPORTING
+         ev_success       = DATA(lv_success)
+         ev_message       = DATA(lv_msg)
+         t_zinv_update    = lcl_buffer=>gt_zinv_update
+         t_result         = DATA(lt_result)
+        CHANGING
+         it_selected_data = lt_data ).
+
+    LOOP AT lt_result INTO DATA(lwa_result).
+
+      READ TABLE keys INTO DATA(lwa_keys)
+       WITH TABLE KEY id COMPONENTS CompanyCode           = lwa_result-companycode
+                                    InventoryDocument     = lwa_result-inventorydocument
+                                    InventoryDocumentItem = lwa_result-inventorydocumentitem
+                                    FiscalYear            = lwa_result-fiscalyear.
+
+      IF lwa_result-success IS NOT INITIAL.
+        reported-zi_mm_invent_closing_ship = VALUE #( BASE reported-zi_mm_invent_closing_ship (
+                                                %tky = lwa_keys-%tky
+                                                %msg = new_message_with_text( severity = if_abap_behv_message=>severity-success
+                                                                              text     = lwa_result-message ) ) ).
+      ELSE.
+        failed-zi_mm_invent_closing_ship   = VALUE #( ( %tky = keys[ 1 ]-%tky ) ).
+        reported-zi_mm_invent_closing_ship = VALUE #( BASE reported-zi_mm_invent_closing_ship (
+                                                 %tky = lwa_keys-%tky
+                                                 %msg = new_message_with_text( severity = if_abap_behv_message=>severity-error
+                                                                               text     = lwa_result-message ) ) ).
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+ENDCLASS.
+
+CLASS lsc_ZI_MM_INVENT_CLOSING_SHIP DEFINITION INHERITING FROM cl_abap_behavior_saver.
+  PROTECTED SECTION.
+
+    METHODS finalize REDEFINITION.
+
+    METHODS check_before_save REDEFINITION.
+
+    METHODS save REDEFINITION.
+
+    METHODS cleanup REDEFINITION.
+
+    METHODS cleanup_finalize REDEFINITION.
+
+ENDCLASS.
+
+CLASS lsc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
+
+  METHOD finalize.
+  ENDMETHOD.
+
+  METHOD check_before_save.
+  ENDMETHOD.
+
+  METHOD save.
+    IF lcl_buffer=>gt_zinv_update IS NOT INITIAL.
+      MODIFY zinv_documentos FROM TABLE @lcl_buffer=>gt_zinv_update.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD cleanup.
+  ENDMETHOD.
+
+  METHOD cleanup_finalize.
+  ENDMETHOD.
+
+ENDCLASS.
+
+*"* use this source file for the definition and implementation of
+*"* local helper classes, interface definitions and type
+*"* declarations
