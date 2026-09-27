@@ -1,0 +1,30 @@
+@EndUserText.label : 'Tabla Z de Documentos ENviados de Invantario Enviados a DELT'
+@AbapCatalog.enhancement.category : #EXTENSIBLE_ANY
+@AbapCatalog.tableCategory : #TRANSPARENT
+@AbapCatalog.deliveryClass : #A
+@AbapCatalog.dataMaintenance : #ALLOWED
+define table zinv_documentos {
+
+  key client    : abap.clnt not null;
+  key bukrs     : bukrs not null;
+  key iblnr     : iblnr not null;
+  key zeile     : dzeile not null;
+  key gjahr     : mjahr not null;
+  werks         : werks_d;
+  lgort         : lgort_d;
+  matnr         : matnr;
+  bldat         : bldat;
+  budat         : budat;
+  @Semantics.quantity.unitOfMeasure : 'iseg.erfme'
+  erfmg         : erfmg;
+  xnull         : xnull;
+  meins         : meins;
+  status        : zde_status;
+  delta_id      : zde_deltaid;
+  error_message : zde_log;
+  last_sync_at  : zde_sincro;
+  last_sync_by  : syuname;
+  fechaconteo   : budat;
+  fechaconta    : budat;
+
+}
