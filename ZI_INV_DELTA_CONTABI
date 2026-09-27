@@ -1,0 +1,39 @@
+@AccessControl.authorizationCheck:
+#NOT_REQUIRED
+@EndUserText.label: 'Interface View: Documentos Inventario'
+define root view entity ZI_INV_DELTA_CONTABI
+  as select from ikpf  as Header
+    inner join   iseg  as Item   on  Header.iblnr = Item.iblnr
+                                 and Header.gjahr = Item.gjahr
+                                 and Header.lstat = ''
+                                 and Item.xloek   = ''
+                                 and Header.dstat = 'X'
+    inner join   t001w as Socwer on Header.werks = Socwer.bwkey
+    inner join   t001k as Bukrs  on Socwer.bwkey = Bukrs.bwkey
+
+{
+  key   Header.iblnr                                         as InventoryDocument,
+  key   Header.gjahr                                         as FiscalYear,
+  key   Item.zeili                                           as InventoryDocumentItem,
+        Bukrs.bukrs                                          as Bukrs,
+        Header.werks                                         as Plant,
+        Header.lgort                                         as Almacen,
+        Item.matnr                                           as Material,
+        @Semantics.quantity.unitOfMeasure: 'BaseUnitOfMeasure'
+        Item.erfmg                                           as Quantity,
+        Item.meins                                           as BaseUnitOfMeasure,
+        //Campo técnico requerido para cantidad
+        Header.bldat                                         as DocumentDate,
+        Header.budat                                         as DocumentDateConta,
+        Item.xnull                                           as QuantityZero,
+        Header.usnam                                         as Nameupd,
+        'Contado'                                            as SyncStatusCode,
+        '                                 '                  as DeltaID,
+        'Por enviar a DELTA                                ' as ErrorMessage,
+        '00-00-0000T00:00:00'                                as LastSyncAt,
+        '               '                                    as Status,
+        '                  '                                 as fechaconteo,
+        '                  '                                 as fechaconta
+
+
+}
