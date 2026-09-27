@@ -32,13 +32,20 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
       RETURN.
     ENDIF.
 
+    DATA lt_zinv_documentos TYPE STANDARD TABLE OF zinv_documentos.
+    DATA lt_zinv_header TYPE HASHED TABLE OF zinv_documentos
+      WITH UNIQUE KEY bukrs iblnr gjahr.
+    DATA lt_delta TYPE STANDARD TABLE OF zi_inv_delta_contabi.
+    DATA lt_delta_header TYPE HASHED TABLE OF zi_inv_delta_contabi
+      WITH UNIQUE KEY bukrs inventorydocument fiscalyear.
+
     SELECT *
       FROM zinv_documentos
       FOR ALL ENTRIES IN @keys
       WHERE bukrs = @keys-CompanyCode
         AND iblnr = @keys-InventoryDocument
         AND gjahr = @keys-FiscalYear
-      INTO TABLE @DATA(lt_zinv_documentos).
+      INTO TABLE @lt_zinv_documentos.
 
     SELECT *
       FROM zi_inv_delta_contabi
@@ -46,44 +53,52 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
       WHERE bukrs             = @keys-CompanyCode
         AND inventorydocument = @keys-InventoryDocument
         AND fiscalyear        = @keys-FiscalYear
-      INTO TABLE @DATA(lt_zi_inv_delta_contabi).
+      INTO TABLE @lt_delta.
 
-    DATA lv_filled TYPE abap_bool.
+    LOOP AT lt_zinv_documentos INTO DATA(ls_z).
+      READ TABLE lt_zinv_header ASSIGNING FIELD-SYMBOL(<fs_header>)
+        WITH TABLE KEY bukrs = ls_z-bukrs
+                       iblnr = ls_z-iblnr
+                       gjahr = ls_z-gjahr.
+      IF sy-subrc <> 0.
+        INSERT ls_z INTO TABLE lt_zinv_header.
+      ELSEIF ls_z-last_sync_at > <fs_header>-last_sync_at.
+        <fs_header> = ls_z.
+      ENDIF.
+    ENDLOOP.
+
+    LOOP AT lt_delta INTO DATA(ls_delta).
+      INSERT ls_delta INTO TABLE lt_delta_header.
+    ENDLOOP.
 
     LOOP AT keys INTO DATA(ls_key).
-      lv_filled = abap_false.
-
       APPEND INITIAL LINE TO result ASSIGNING <fs_result>.
       <fs_result>-CompanyCode       = ls_key-CompanyCode.
       <fs_result>-InventoryDocument = ls_key-InventoryDocument.
       <fs_result>-FiscalYear        = ls_key-FiscalYear.
 
-      LOOP AT lt_zinv_documentos INTO DATA(ls_z)
-        WHERE bukrs = ls_key-CompanyCode
-          AND iblnr = ls_key-InventoryDocument
-          AND gjahr = ls_key-FiscalYear.
-        IF lv_filled = abap_false OR ls_z-last_sync_at > <fs_result>-LastSyncAt.
-          <fs_result>-Plant             = ls_z-werks.
-          <fs_result>-Almacen           = ls_z-lgort.
-          <fs_result>-DocumentDate      = ls_z-bldat.
-          <fs_result>-SyncStatusCode    = ls_z-status.
-          <fs_result>-Nameupd           = ls_z-last_sync_by.
-          <fs_result>-LastSyncAt        = ls_z-last_sync_at.
-          <fs_result>-DeltaId           = ls_z-delta_id.
-          <fs_result>-ErrorMessage      = ls_z-error_message.
-          <fs_result>-DocumentDateConta = ls_z-budat.
-          lv_filled = abap_true.
-        ENDIF.
-      ENDLOOP.
-
-      IF lv_filled = abap_true.
+      READ TABLE lt_zinv_header INTO DATA(ls_header)
+        WITH TABLE KEY bukrs = ls_key-CompanyCode
+                       iblnr = ls_key-InventoryDocument
+                       gjahr = ls_key-FiscalYear.
+      IF sy-subrc = 0.
+        <fs_result>-Plant             = ls_header-werks.
+        <fs_result>-Almacen           = ls_header-lgort.
+        <fs_result>-DocumentDate      = ls_header-bldat.
+        <fs_result>-SyncStatusCode    = ls_header-status.
+        <fs_result>-Nameupd           = ls_header-last_sync_by.
+        <fs_result>-LastSyncAt        = ls_header-last_sync_at.
+        <fs_result>-DeltaId           = ls_header-delta_id.
+        <fs_result>-ErrorMessage      = ls_header-error_message.
+        <fs_result>-DocumentDateConta = ls_header-budat.
         CONTINUE.
       ENDIF.
 
-      LOOP AT lt_zi_inv_delta_contabi INTO DATA(ls_d)
-        WHERE bukrs             = ls_key-CompanyCode
-          AND inventorydocument = ls_key-InventoryDocument
-          AND fiscalyear        = ls_key-FiscalYear.
+      READ TABLE lt_delta_header INTO DATA(ls_d)
+        WITH TABLE KEY bukrs             = ls_key-CompanyCode
+                       inventorydocument = ls_key-InventoryDocument
+                       fiscalyear        = ls_key-FiscalYear.
+      IF sy-subrc = 0.
         <fs_result>-Plant             = ls_d-plant.
         <fs_result>-Almacen           = ls_d-almacen.
         <fs_result>-DocumentDate      = ls_d-documentdate.
@@ -93,8 +108,7 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
         <fs_result>-DeltaId           = ls_d-deltaid.
         <fs_result>-ErrorMessage      = ls_d-errormessage.
         <fs_result>-DocumentDateConta = ls_d-documentdateconta.
-        EXIT.
-      ENDLOOP.
+      ENDIF.
     ENDLOOP.
   ENDMETHOD.
 
@@ -113,11 +127,22 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
              message           TYPE string,
            END OF ty_doc_msg.
 
-    DATA lt_doc_msg TYPE STANDARD TABLE OF ty_doc_msg.
+    DATA lt_doc_msg TYPE HASHED TABLE OF ty_doc_msg
+      WITH UNIQUE KEY companycode inventorydocument fiscalyear.
+
+    TYPES ty_action_key LIKE LINE OF keys.
+    DATA lt_action_keys TYPE HASHED TABLE OF ty_action_key
+      WITH UNIQUE KEY companycode inventorydocument fiscalyear.
 
     IF keys IS INITIAL.
       RETURN.
     ENDIF.
+
+    INSERT LINES OF keys INTO TABLE lt_action_keys.
+
+    DATA lt_zinv TYPE SORTED TABLE OF zinv_documentos
+      WITH NON-UNIQUE KEY bukrs iblnr zeile gjahr.
+    DATA lt_delta TYPE STANDARD TABLE OF zi_inv_delta_contabi.
 
     SELECT *
       FROM zinv_documentos
@@ -125,7 +150,7 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
       WHERE bukrs = @keys-CompanyCode
         AND iblnr = @keys-InventoryDocument
         AND gjahr = @keys-FiscalYear
-      INTO TABLE @DATA(lt_zinv).
+      INTO TABLE @lt_zinv.
 
     SELECT *
       FROM zi_inv_delta_contabi
@@ -133,7 +158,7 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
       WHERE bukrs             = @keys-CompanyCode
         AND inventorydocument = @keys-InventoryDocument
         AND fiscalyear        = @keys-FiscalYear
-      INTO TABLE @DATA(lt_delta).
+      INTO TABLE @lt_delta.
 
     LOOP AT lt_zinv INTO DATA(ls_z).
       APPEND VALUE #(
@@ -157,15 +182,12 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
       ) TO lt_data.
     ENDLOOP.
 
-    SORT lt_zinv BY bukrs iblnr gjahr zeile.
-
     LOOP AT lt_delta INTO DATA(ls_d).
       READ TABLE lt_zinv TRANSPORTING NO FIELDS
-        WITH KEY bukrs = ls_d-bukrs
-                 iblnr = ls_d-inventorydocument
-                 gjahr = ls_d-fiscalyear
-                 zeile = ls_d-inventorydocumentitem
-        BINARY SEARCH.
+        WITH TABLE KEY bukrs = ls_d-bukrs
+                       iblnr = ls_d-inventorydocument
+                       zeile = ls_d-inventorydocumentitem
+                       gjahr = ls_d-fiscalyear.
       IF sy-subrc = 0.
         CONTINUE.
       ENDIF.
@@ -213,17 +235,17 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
 
     LOOP AT lt_result INTO DATA(lwa_result).
       READ TABLE lt_doc_msg ASSIGNING FIELD-SYMBOL(<fs_msg>)
-        WITH KEY companycode       = lwa_result-companycode
-                 inventorydocument = lwa_result-inventorydocument
-                 fiscalyear        = lwa_result-fiscalyear.
+        WITH TABLE KEY companycode       = lwa_result-companycode
+                       inventorydocument = lwa_result-inventorydocument
+                       fiscalyear        = lwa_result-fiscalyear.
       IF sy-subrc <> 0.
-        APPEND VALUE #(
+        INSERT VALUE #(
           companycode       = lwa_result-companycode
           inventorydocument = lwa_result-inventorydocument
           fiscalyear        = lwa_result-fiscalyear
           success           = lwa_result-success
           message           = lwa_result-message
-        ) TO lt_doc_msg.
+        ) INTO TABLE lt_doc_msg.
       ELSEIF lwa_result-success IS INITIAL AND <fs_msg>-success = abap_true.
         <fs_msg>-success = abap_false.
         <fs_msg>-message = lwa_result-message.
@@ -231,10 +253,11 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
     ENDLOOP.
 
     LOOP AT lt_doc_msg INTO DATA(ls_doc_msg).
-      LOOP AT keys INTO DATA(lwa_keys)
-        WHERE CompanyCode       = ls_doc_msg-companycode
-          AND InventoryDocument = ls_doc_msg-inventorydocument
-          AND FiscalYear        = ls_doc_msg-fiscalyear.
+      READ TABLE lt_action_keys INTO DATA(lwa_keys)
+        WITH TABLE KEY companycode       = ls_doc_msg-companycode
+                       inventorydocument = ls_doc_msg-inventorydocument
+                       fiscalyear        = ls_doc_msg-fiscalyear.
+      IF sy-subrc = 0.
 
         IF ls_doc_msg-success = abap_true.
           reported-zi_mm_invent_closing_ship = VALUE #( BASE reported-zi_mm_invent_closing_ship (
@@ -251,8 +274,7 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
                      severity = if_abap_behv_message=>severity-error
                      text     = ls_doc_msg-message ) ) ).
         ENDIF.
-        EXIT.
-      ENDLOOP.
+      ENDIF.
     ENDLOOP.
   ENDMETHOD.
 
