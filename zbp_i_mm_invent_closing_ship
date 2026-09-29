@@ -18,6 +18,9 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP DEFINITION INHERITING FROM cl_abap_behavior_
     METHODS sendcpi FOR MODIFY
       IMPORTING keys FOR ACTION zi_mm_invent_closing_ship~sendcpi.
 
+    METHODS rba_Item FOR READ
+      IMPORTING keys_rba FOR READ zi_mm_invent_closing_ship\_Item FULL result_requested RESULT result LINK association_links.
+
 ENDCLASS.
 
 CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
@@ -274,6 +277,120 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
                      severity = if_abap_behv_message=>severity-error
                      text     = ls_doc_msg-message ) ) ).
         ENDIF.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD rba_Item.
+    DATA(lo_query) = NEW zcl_mm_query_invent_item( ).
+
+    LOOP AT keys_rba INTO DATA(ls_key).
+      DATA(lt_item) = lo_query->get_items(
+        iv_companycode = ls_key-CompanyCode
+        iv_document    = ls_key-InventoryDocument
+        iv_fiscalyear  = ls_key-FiscalYear ).
+
+      LOOP AT lt_item INTO DATA(ls_item).
+        IF result_requested = abap_true.
+          DATA ls_result LIKE LINE OF result.
+          CLEAR ls_result.
+          ls_result = CORRESPONDING #( ls_item ).
+          ls_result-%tky = CORRESPONDING #( ls_item ).
+          INSERT ls_result INTO TABLE result.
+        ENDIF.
+
+        INSERT VALUE #(
+          source-%tky = ls_key-%tky
+          target-%tky = CORRESPONDING #( ls_item )
+        ) INTO TABLE association_links.
+      ENDLOOP.
+    ENDLOOP.
+  ENDMETHOD.
+
+ENDCLASS.
+
+CLASS lhc_ZI_MM_INVENT_CLOSING_ITEM DEFINITION INHERITING FROM cl_abap_behavior_handler.
+  PRIVATE SECTION.
+    METHODS read FOR READ
+      IMPORTING keys FOR READ zi_mm_invent_closing_item RESULT result.
+
+    METHODS rba_Header FOR READ
+      IMPORTING keys_rba FOR READ zi_mm_invent_closing_item\_Header FULL result_requested RESULT result LINK association_links.
+ENDCLASS.
+
+CLASS lhc_ZI_MM_INVENT_CLOSING_ITEM IMPLEMENTATION.
+
+  METHOD read.
+    DATA(lo_query) = NEW zcl_mm_query_invent_item( ).
+
+    LOOP AT keys INTO DATA(ls_key).
+      DATA(lt_item) = lo_query->get_items(
+        iv_companycode = ls_key-CompanyCode
+        iv_document    = ls_key-InventoryDocument
+        iv_fiscalyear  = ls_key-FiscalYear
+        iv_item        = ls_key-InventoryDocumentItem ).
+
+      READ TABLE lt_item INTO DATA(ls_item) INDEX 1.
+      IF sy-subrc = 0.
+        DATA ls_read LIKE LINE OF result.
+        CLEAR ls_read.
+        ls_read = CORRESPONDING #( ls_item ).
+        ls_read-%tky = CORRESPONDING #( ls_item ).
+        APPEND ls_read TO result.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD rba_Header.
+    TYPES: BEGIN OF ty_doc_key,
+             companycode       TYPE bukrs,
+             inventorydocument TYPE iblnr,
+             fiscalyear        TYPE gjahr,
+           END OF ty_doc_key.
+
+    DATA lt_seen        TYPE HASHED TABLE OF ty_doc_key WITH UNIQUE KEY companycode inventorydocument fiscalyear.
+    DATA lt_parent_key  TYPE TABLE FOR READ IMPORT zi_mm_invent_closing_ship.
+
+    LOOP AT keys_rba INTO DATA(ls_key).
+      INSERT VALUE #(
+        companycode       = ls_key-CompanyCode
+        inventorydocument = ls_key-InventoryDocument
+        fiscalyear        = ls_key-FiscalYear
+      ) INTO TABLE lt_seen.
+    ENDLOOP.
+
+    LOOP AT lt_seen INTO DATA(ls_seen).
+      APPEND VALUE #(
+        CompanyCode       = ls_seen-companycode
+        InventoryDocument = ls_seen-inventorydocument
+        FiscalYear        = ls_seen-fiscalyear
+      ) TO lt_parent_key.
+    ENDLOOP.
+
+    READ ENTITIES OF zi_mm_invent_closing_ship IN LOCAL MODE
+      ENTITY zi_mm_invent_closing_ship
+      ALL FIELDS WITH CORRESPONDING #( lt_parent_key )
+      RESULT DATA(lt_header).
+
+    TYPES ty_header LIKE LINE OF lt_header.
+    DATA lt_header_idx TYPE HASHED TABLE OF ty_header
+      WITH UNIQUE KEY companycode inventorydocument fiscalyear.
+    INSERT LINES OF lt_header INTO TABLE lt_header_idx.
+
+    IF result_requested = abap_true.
+      result = CORRESPONDING #( lt_header ).
+    ENDIF.
+
+    LOOP AT keys_rba INTO ls_key.
+      READ TABLE lt_header_idx INTO DATA(ls_header)
+        WITH TABLE KEY companycode       = ls_key-CompanyCode
+                       inventorydocument = ls_key-InventoryDocument
+                       fiscalyear        = ls_key-FiscalYear.
+      IF sy-subrc = 0.
+        INSERT VALUE #(
+          source-%tky = ls_key-%tky
+          target-%tky = ls_header-%tky
+        ) INTO TABLE association_links.
       ENDIF.
     ENDLOOP.
   ENDMETHOD.
