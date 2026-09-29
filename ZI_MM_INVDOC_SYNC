@@ -1,0 +1,26 @@
+@AbapCatalog.viewEnhancementCategory: [#NONE]
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@EndUserText.label: 'Posiciones sincronizadas de inventario'
+@Metadata.ignorePropagatedAnnotations: true
+define view entity ZI_MM_INVDOC_SYNC
+  as select from zinv_documentos
+{
+  key bukrs         as CompanyCode,
+  key iblnr         as InventoryDocument,
+  key zeile         as InventoryDocumentItem,
+  key gjahr         as FiscalYear,
+      werks         as Plant,
+      lgort         as StorageLocation,
+      matnr         as Material,
+      bldat         as DocumentDate,
+      budat         as PostingDate,
+      @Semantics.quantity.unitOfMeasure: 'BaseUnit'
+      erfmg         as Quantity,
+      xnull         as QuantityZero,
+      meins         as BaseUnit,
+      status        as SyncStatusCode,
+      last_sync_by  as ChangedByUser,
+      last_sync_at  as LastSyncAt,
+      delta_id      as DeltaId,
+      error_message as ErrorMessage
+}
