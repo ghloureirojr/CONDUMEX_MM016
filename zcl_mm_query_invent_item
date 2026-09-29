@@ -1,0 +1,229 @@
+CLASS zcl_mm_query_invent_item DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC.
+
+  PUBLIC SECTION.
+    INTERFACES if_rap_query_provider.
+
+    TYPES tt_item TYPE STANDARD TABLE OF zi_mm_invent_closing_item WITH EMPTY KEY.
+
+    METHODS get_items
+      IMPORTING
+        iv_companycode TYPE bukrs
+        iv_document    TYPE iblnr
+        iv_fiscalyear  TYPE gjahr
+        iv_item        TYPE dzeile OPTIONAL
+      RETURNING
+        VALUE(rt_item) TYPE tt_item.
+
+  PRIVATE SECTION.
+    METHODS get_filter_low
+      IMPORTING
+        it_pairs      TYPE if_rap_query_filter=>tt_name_range_pairs
+        iv_name       TYPE string
+      RETURNING
+        VALUE(rv_low) TYPE string.
+ENDCLASS.
+
+
+
+CLASS zcl_mm_query_invent_item IMPLEMENTATION.
+
+  METHOD get_filter_low.
+    rv_low = VALUE #( it_pairs[ name = iv_name ]-range[ 1 ]-low DEFAULT '' ).
+  ENDMETHOD.
+
+  METHOD get_items.
+    TYPES: BEGIN OF ty_released,
+             companycode                   TYPE bukrs,
+             physicalinventorydocument     TYPE iblnr,
+             physicalinventorydocumentitem TYPE dzeile,
+             fiscalyear                    TYPE gjahr,
+             plant                         TYPE werks_d,
+             storagelocation               TYPE lgort_d,
+             material                      TYPE matnr,
+             documentdate                  TYPE bldat,
+             postingdate                   TYPE budat,
+             quantityinunitofentry         TYPE erfmg,
+             unitofentry                   TYPE meins,
+             physicalinventoryitemiszero   TYPE c LENGTH 1,
+           END OF ty_released.
+
+    DATA lt_sync TYPE HASHED TABLE OF zi_mm_invdoc_sync
+      WITH UNIQUE KEY companycode inventorydocument fiscalyear inventorydocumentitem.
+    DATA lt_released TYPE STANDARD TABLE OF ty_released.
+    DATA lt_result TYPE HASHED TABLE OF zi_mm_invent_closing_item
+      WITH UNIQUE KEY companycode inventorydocument fiscalyear inventorydocumentitem.
+
+    IF iv_companycode IS INITIAL
+    OR iv_document IS INITIAL
+    OR iv_fiscalyear IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    IF iv_item IS INITIAL.
+      SELECT *
+        FROM zi_mm_invdoc_sync
+        WHERE CompanyCode       = @iv_companycode
+          AND InventoryDocument = @iv_document
+          AND FiscalYear        = @iv_fiscalyear
+        INTO TABLE @lt_sync.
+    ELSE.
+      SELECT *
+        FROM zi_mm_invdoc_sync
+        WHERE CompanyCode            = @iv_companycode
+          AND InventoryDocument      = @iv_document
+          AND FiscalYear             = @iv_fiscalyear
+          AND InventoryDocumentItem  = @iv_item
+        INTO TABLE @lt_sync.
+    ENDIF.
+
+    IF iv_item IS INITIAL.
+      SELECT
+        plant~CompanyCode,
+        item~PhysicalInventoryDocument,
+        item~PhysicalInventoryDocumentItem,
+        item~FiscalYear,
+        item~Plant,
+        item~StorageLocation,
+        item~Material,
+        header~DocumentDate,
+        item~PostingDate,
+        item~QuantityInUnitOfEntry,
+        item~UnitOfEntry,
+        item~PhysicalInventoryItemIsZero
+        FROM I_PhysInvtryDocItem AS item
+        INNER JOIN I_PhysInvtryDocHeader AS header
+          ON  header~PhysicalInventoryDocument = item~PhysicalInventoryDocument
+          AND header~FiscalYear                = item~FiscalYear
+        INNER JOIN I_Plant AS plant
+          ON plant~Plant = item~Plant
+        WHERE item~PhysicalInventoryDocument = @iv_document
+          AND item~FiscalYear                = @iv_fiscalyear
+          AND plant~CompanyCode               = @iv_companycode
+          AND item~PhysInvtryItemIsDeleted    = ''
+        INTO TABLE @lt_released.
+    ELSE.
+      SELECT
+        plant~CompanyCode,
+        item~PhysicalInventoryDocument,
+        item~PhysicalInventoryDocumentItem,
+        item~FiscalYear,
+        item~Plant,
+        item~StorageLocation,
+        item~Material,
+        header~DocumentDate,
+        item~PostingDate,
+        item~QuantityInUnitOfEntry,
+        item~UnitOfEntry,
+        item~PhysicalInventoryItemIsZero
+        FROM I_PhysInvtryDocItem AS item
+        INNER JOIN I_PhysInvtryDocHeader AS header
+          ON  header~PhysicalInventoryDocument = item~PhysicalInventoryDocument
+          AND header~FiscalYear                = item~FiscalYear
+        INNER JOIN I_Plant AS plant
+          ON plant~Plant = item~Plant
+        WHERE item~PhysicalInventoryDocument     = @iv_document
+          AND item~FiscalYear                    = @iv_fiscalyear
+          AND item~PhysicalInventoryDocumentItem = @iv_item
+          AND plant~CompanyCode                   = @iv_companycode
+          AND item~PhysInvtryItemIsDeleted        = ''
+        INTO TABLE @lt_released.
+    ENDIF.
+
+    LOOP AT lt_released INTO DATA(ls_released).
+      INSERT VALUE #(
+        CompanyCode           = ls_released-CompanyCode
+        InventoryDocument     = ls_released-PhysicalInventoryDocument
+        FiscalYear            = ls_released-FiscalYear
+        InventoryDocumentItem = ls_released-PhysicalInventoryDocumentItem
+        Plant                 = ls_released-Plant
+        StorageLocation       = ls_released-StorageLocation
+        Material              = ls_released-Material
+        DocumentDate          = ls_released-DocumentDate
+        PostingDate           = ls_released-PostingDate
+        Quantity              = ls_released-QuantityInUnitOfEntry
+        QuantityZero          = ls_released-PhysicalInventoryItemIsZero
+        BaseUnit              = ls_released-UnitOfEntry
+      ) INTO TABLE lt_result.
+    ENDLOOP.
+
+    LOOP AT lt_sync INTO DATA(ls_sync).
+      READ TABLE lt_result ASSIGNING FIELD-SYMBOL(<fs_item>)
+        WITH TABLE KEY companycode           = ls_sync-CompanyCode
+                       inventorydocument     = ls_sync-InventoryDocument
+                       fiscalyear            = ls_sync-FiscalYear
+                       inventorydocumentitem = ls_sync-InventoryDocumentItem.
+      IF sy-subrc <> 0.
+        INSERT VALUE #(
+          CompanyCode           = ls_sync-CompanyCode
+          InventoryDocument     = ls_sync-InventoryDocument
+          FiscalYear            = ls_sync-FiscalYear
+          InventoryDocumentItem = ls_sync-InventoryDocumentItem
+        ) INTO TABLE lt_result.
+        READ TABLE lt_result ASSIGNING <fs_item>
+          WITH TABLE KEY companycode           = ls_sync-CompanyCode
+                         inventorydocument     = ls_sync-InventoryDocument
+                         fiscalyear            = ls_sync-FiscalYear
+                         inventorydocumentitem = ls_sync-InventoryDocumentItem.
+      ENDIF.
+      <fs_item>-Plant           = ls_sync-Plant.
+      <fs_item>-StorageLocation = ls_sync-StorageLocation.
+      <fs_item>-Material        = ls_sync-Material.
+      <fs_item>-DocumentDate    = ls_sync-DocumentDate.
+      <fs_item>-PostingDate     = ls_sync-PostingDate.
+      <fs_item>-Quantity        = ls_sync-Quantity.
+      <fs_item>-QuantityZero    = ls_sync-QuantityZero.
+      <fs_item>-BaseUnit        = ls_sync-BaseUnit.
+      <fs_item>-SyncStatusCode  = ls_sync-SyncStatusCode.
+    ENDLOOP.
+
+    rt_item = VALUE #( FOR ls_item IN lt_result ( ls_item ) ).
+    SORT rt_item BY inventorydocumentitem.
+  ENDMETHOD.
+
+  METHOD if_rap_query_provider~select.
+    DATA lt_result TYPE tt_item.
+    DATA lt_page   TYPE tt_item.
+
+    TRY.
+        DATA(lt_pairs) = io_request->get_filter( )->get_as_ranges( ).
+      CATCH cx_rap_query_filter_no_range.
+        CLEAR lt_pairs.
+    ENDTRY.
+
+    DATA(lv_companycode) = CONV bukrs( get_filter_low( it_pairs = lt_pairs iv_name = 'COMPANYCODE' ) ).
+    DATA(lv_document)    = CONV iblnr( get_filter_low( it_pairs = lt_pairs iv_name = 'INVENTORYDOCUMENT' ) ).
+    DATA(lv_fiscalyear)  = CONV gjahr( get_filter_low( it_pairs = lt_pairs iv_name = 'FISCALYEAR' ) ).
+    DATA(lv_item)        = CONV dzeile( get_filter_low( it_pairs = lt_pairs iv_name = 'INVENTORYDOCUMENTITEM' ) ).
+
+    lt_result = get_items(
+      iv_companycode = lv_companycode
+      iv_document    = lv_document
+      iv_fiscalyear  = lv_fiscalyear
+      iv_item        = lv_item ).
+
+    IF io_request->is_total_numb_of_rec_requested( ).
+      io_response->set_total_number_of_records( CONV int8( lines( lt_result ) ) ).
+    ENDIF.
+
+    DATA(lo_paging)    = io_request->get_paging( ).
+    DATA(lv_offset)    = lo_paging->get_offset( ).
+    DATA(lv_page_size) = lo_paging->get_page_size( ).
+
+    IF lv_offset > 0 OR lv_page_size <> if_rap_query_paging=>page_size_unlimited.
+      LOOP AT lt_result INTO DATA(ls_page) FROM lv_offset + 1.
+        APPEND ls_page TO lt_page.
+        IF lv_page_size <> if_rap_query_paging=>page_size_unlimited
+        AND lines( lt_page ) >= lv_page_size.
+          EXIT.
+        ENDIF.
+      ENDLOOP.
+      lt_result = lt_page.
+    ENDIF.
+
+    io_response->set_data( lt_result ).
+  ENDMETHOD.
+
+ENDCLASS.
