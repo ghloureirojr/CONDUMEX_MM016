@@ -11,6 +11,14 @@ define root custom entity ZI_MM_INVENT_CLOSING_SHIP
       type                  :          #IDENTIFICATION_REFERENCE,
       label                 :         'Datos Generales',
       position              :      10
+      },
+      {
+      id                    :            'Items',
+      purpose               :       #STANDARD,
+      type                  :          #LINEITEM_REFERENCE,
+      label                 :         'Posiciones',
+      position              :      20,
+      targetElement         :         '_Item'
       }
       ]
       @UI.lineItem          : [{ type: #FOR_ACTION, dataAction: 'sendCPI', label: 'Enviar CPI', position: 10, invocationGrouping: #CHANGE_SET },
@@ -107,5 +115,7 @@ define root custom entity ZI_MM_INVENT_CLOSING_SHIP
       @UI.identification    : [ { position: 170 } ]
       @EndUserText.label    : 'Fecha de contabilización'
       DocumentDateConta     : budat;
+
+      _Item : composition [0..*] of ZI_MM_INVENT_CLOSING_ITEM;
 
 }
