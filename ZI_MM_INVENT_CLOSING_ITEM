@@ -1,0 +1,64 @@
+@EndUserText.label: 'Posicion de cierre de inventario'
+@ObjectModel.query.implementedBy: 'ABAP:ZCL_MM_QUERY_INVENT_ITEM'
+@UI.headerInfo: { typeName: 'Posicion', typeNamePlural: 'Posiciones' }
+
+define custom entity ZI_MM_INVENT_CLOSING_ITEM
+{
+      @UI.lineItem       : [{ position: 10 }]
+      @EndUserText.label : 'Sociedad'
+  key CompanyCode            : bukrs;
+
+      @UI.lineItem       : [{ position: 20 }]
+      @EndUserText.label : 'Documento de inventario'
+  key InventoryDocument      : iblnr;
+
+      @UI.lineItem       : [{ position: 30 }]
+      @EndUserText.label : 'Ejercicio fiscal'
+  key FiscalYear             : gjahr;
+
+      @UI.lineItem       : [{ position: 40 }]
+      @EndUserText.label : 'Posicion del documento de inventario'
+  key InventoryDocumentItem  : dzeile;
+
+      @UI.lineItem       : [{ position: 50 }]
+      @EndUserText.label : 'Centro'
+      Plant                  : werks_d;
+
+      @UI.lineItem       : [{ position: 60 }]
+      @EndUserText.label : 'Almacen'
+      StorageLocation        : lgort_d;
+
+      @UI.lineItem       : [{ position: 70 }]
+      @EndUserText.label : 'Material'
+      Material               : matnr;
+
+      @UI.lineItem       : [{ position: 80 }]
+      @EndUserText.label : 'Fecha del documento'
+      DocumentDate           : bldat;
+
+      @UI.lineItem       : [{ position: 90 }]
+      @EndUserText.label : 'Fecha de contabilizacion'
+      PostingDate            : budat;
+
+      @UI.lineItem       : [{ position: 100 }]
+      @EndUserText.label : 'Cantidad'
+      @Semantics.quantity.unitOfMeasure: 'BaseUnit'
+      Quantity               : erfmg;
+
+      @UI.lineItem       : [{ position: 110 }]
+      @EndUserText.label : 'Cantidad cero'
+      QuantityZero           : abap.char( 1 );
+
+      @UI.lineItem       : [{ position: 120 }]
+      @EndUserText.label : 'Unidad de medida base'
+      BaseUnit               : meins;
+
+      @UI.lineItem       : [{ position: 130 }]
+      @EndUserText.label : 'Codigo de estado de sincronizacion'
+      SyncStatusCode         : zde_status;
+
+      _Header : association to parent ZI_MM_INVENT_CLOSING_SHIP
+                  on  $projection.CompanyCode       = _Header.CompanyCode
+                  and $projection.InventoryDocument = _Header.InventoryDocument
+                  and $projection.FiscalYear        = _Header.FiscalYear;
+}
