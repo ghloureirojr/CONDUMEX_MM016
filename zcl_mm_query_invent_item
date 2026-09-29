@@ -36,7 +36,6 @@ CLASS zcl_mm_query_invent_item IMPLEMENTATION.
 
   METHOD get_items.
     TYPES: BEGIN OF ty_released,
-             companycode                   TYPE bukrs,
              physicalinventorydocument     TYPE iblnr,
              physicalinventorydocumentitem TYPE dzeile,
              fiscalyear                    TYPE gjahr,
@@ -81,7 +80,6 @@ CLASS zcl_mm_query_invent_item IMPLEMENTATION.
 
     IF iv_item IS INITIAL.
       SELECT
-        plant~CompanyCode,
         item~PhysicalInventoryDocument,
         item~PhysicalInventoryDocumentItem,
         item~FiscalYear,
@@ -97,16 +95,12 @@ CLASS zcl_mm_query_invent_item IMPLEMENTATION.
         INNER JOIN I_PhysInvtryDocHeader AS header
           ON  header~PhysicalInventoryDocument = item~PhysicalInventoryDocument
           AND header~FiscalYear                = item~FiscalYear
-        INNER JOIN I_Plant AS plant
-          ON plant~Plant = item~Plant
         WHERE item~PhysicalInventoryDocument = @iv_document
           AND item~FiscalYear                = @iv_fiscalyear
-          AND plant~CompanyCode               = @iv_companycode
           AND item~PhysInvtryItemIsDeleted    = ''
         INTO TABLE @lt_released.
     ELSE.
       SELECT
-        plant~CompanyCode,
         item~PhysicalInventoryDocument,
         item~PhysicalInventoryDocumentItem,
         item~FiscalYear,
@@ -122,19 +116,16 @@ CLASS zcl_mm_query_invent_item IMPLEMENTATION.
         INNER JOIN I_PhysInvtryDocHeader AS header
           ON  header~PhysicalInventoryDocument = item~PhysicalInventoryDocument
           AND header~FiscalYear                = item~FiscalYear
-        INNER JOIN I_Plant AS plant
-          ON plant~Plant = item~Plant
         WHERE item~PhysicalInventoryDocument     = @iv_document
           AND item~FiscalYear                    = @iv_fiscalyear
           AND item~PhysicalInventoryDocumentItem = @iv_item
-          AND plant~CompanyCode                   = @iv_companycode
           AND item~PhysInvtryItemIsDeleted        = ''
         INTO TABLE @lt_released.
     ENDIF.
 
     LOOP AT lt_released INTO DATA(ls_released).
       INSERT VALUE #(
-        CompanyCode           = ls_released-CompanyCode
+        CompanyCode           = iv_companycode
         InventoryDocument     = ls_released-PhysicalInventoryDocument
         FiscalYear            = ls_released-FiscalYear
         InventoryDocumentItem = ls_released-PhysicalInventoryDocumentItem
