@@ -1,0 +1,17 @@
+unmanaged implementation in class zbp_zi_mm_invent_closing_ship unique;
+strict ( 2 );
+
+define behavior for ZI_MM_INVENT_CLOSING_SHIP alias Header
+lock master
+authorization master ( instance )
+{
+  association _Item;
+  action sendCPI;
+}
+
+define behavior for ZI_MM_INVENT_CLOSING_ITEM alias Item
+lock dependent by _Header
+authorization dependent by _Header
+{
+  association _Header;
+}
