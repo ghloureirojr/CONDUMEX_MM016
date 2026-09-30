@@ -67,6 +67,7 @@ CLASS zcl_mm_query_invent_item IMPLEMENTATION.
         WHERE CompanyCode       = @iv_companycode
           AND InventoryDocument = @iv_document
           AND FiscalYear        = @iv_fiscalyear
+          AND SyncStatusCode IN ( 'CANCELADO', 'CANCEL_ENV', 'CANCEL_ERR' )
         INTO TABLE @lt_sync.
     ELSE.
       SELECT *
@@ -75,6 +76,7 @@ CLASS zcl_mm_query_invent_item IMPLEMENTATION.
           AND InventoryDocument      = @iv_document
           AND FiscalYear             = @iv_fiscalyear
           AND InventoryDocumentItem  = @iv_item
+          AND SyncStatusCode IN ( 'CANCELADO', 'CANCEL_ENV', 'CANCEL_ERR' )
         INTO TABLE @lt_sync.
     ENDIF.
 
@@ -168,6 +170,18 @@ CLASS zcl_mm_query_invent_item IMPLEMENTATION.
       <fs_item>-QuantityZero    = ls_sync-QuantityZero.
       <fs_item>-BaseUnit        = ls_sync-BaseUnit.
       <fs_item>-SyncStatusCode  = ls_sync-SyncStatusCode.
+    ENDLOOP.
+
+    DATA lr_cancel TYPE RANGE OF zde_status.
+    lr_cancel = VALUE #(
+      ( sign = 'I' option = 'EQ' low = 'CANCELADO' )
+      ( sign = 'I' option = 'EQ' low = 'CANCEL_ENV' )
+      ( sign = 'I' option = 'EQ' low = 'CANCEL_ERR' ) ).
+
+    LOOP AT lt_result INTO DATA(ls_keep).
+      IF ls_keep-SyncStatusCode NOT IN lr_cancel.
+        DELETE TABLE lt_result FROM ls_keep.
+      ENDIF.
     ENDLOOP.
 
     rt_item = VALUE #( FOR ls_item IN lt_result ( ls_item ) ).
