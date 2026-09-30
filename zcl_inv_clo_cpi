@@ -282,9 +282,11 @@ CLASS zcl_inv_clo_cpi IMPLEMENTATION.
           lv_message = |Error de sistema/SOAP en doc { <fs_group>-inventorydocument }: { lo_sys_exception->get_text( ) }|.
       ENDTRY.
 
+      DATA(lv_status) = COND zde_status( WHEN lv_ok = abap_true THEN 'CANCEL_ENV' ELSE 'CANCEL_ERR' ).
+
       LOOP AT GROUP <fs_group> ASSIGNING <fs_doc>.
         <fs_doc>-deltaid = lv_uuid.
-        <fs_doc>-syncstatuscode = COND #( WHEN lv_ok = abap_true THEN 'Envío exitoso a CPI' ELSE 'NOTSENT' ).
+        <fs_doc>-syncstatuscode = lv_status.
         <fs_doc>-menerror = lv_message.
 
         ls_zinv = VALUE #(
@@ -301,7 +303,7 @@ CLASS zcl_inv_clo_cpi IMPLEMENTATION.
           xnull         = <fs_doc>-quantityzero
           meins         = <fs_doc>-baseunitofmeasure
           delta_id      = lv_uuid
-          status        = COND #( WHEN lv_ok = abap_true THEN 'SEND' ELSE 'NOTSENT' )
+          status        = lv_status
           last_sync_at  = lv_timestamp_iso
           last_sync_by  = sy-uname
           error_message = lv_message
