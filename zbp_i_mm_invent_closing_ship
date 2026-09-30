@@ -436,20 +436,44 @@ CLASS lsc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD save.
-    IF lcl_buffer=>gt_zinv_update IS INITIAL.
+    DATA lt_update TYPE STANDARD TABLE OF zinv_documentos.
+
+    lt_update = lcl_buffer=>gt_zinv_update.
+    IF lt_update IS INITIAL.
       RETURN.
     ENDIF.
 
-    UPDATE zinv_documentos FROM @lcl_buffer=>gt_zinv_update AS upd
-      SET status        = @upd-status,
-          delta_id      = @upd-delta_id,
-          error_message = @upd-error_message,
-          last_sync_at  = @upd-last_sync_at,
-          last_sync_by  = @upd-last_sync_by
-      WHERE zinv_documentos~bukrs = @upd-bukrs
-        AND zinv_documentos~iblnr = @upd-iblnr
-        AND zinv_documentos~zeile = @upd-zeile
-        AND zinv_documentos~gjahr = @upd-gjahr.
+    SELECT *
+      FROM zinv_documentos
+      FOR ALL ENTRIES IN @lt_update
+      WHERE bukrs = @lt_update-bukrs
+        AND iblnr = @lt_update-iblnr
+        AND zeile = @lt_update-zeile
+        AND gjahr = @lt_update-gjahr
+      INTO TABLE @DATA(lt_current).
+
+    DATA lt_upd_idx TYPE HASHED TABLE OF zinv_documentos
+      WITH UNIQUE KEY bukrs iblnr zeile gjahr.
+    INSERT LINES OF lt_update INTO TABLE lt_upd_idx.
+
+    LOOP AT lt_current ASSIGNING FIELD-SYMBOL(<fs_row>).
+      READ TABLE lt_upd_idx INTO DATA(ls_upd)
+        WITH TABLE KEY bukrs = <fs_row>-bukrs
+                       iblnr = <fs_row>-iblnr
+                       zeile = <fs_row>-zeile
+                       gjahr = <fs_row>-gjahr.
+      IF sy-subrc = 0.
+        <fs_row>-status        = ls_upd-status.
+        <fs_row>-delta_id      = ls_upd-delta_id.
+        <fs_row>-error_message = ls_upd-error_message.
+        <fs_row>-last_sync_at  = ls_upd-last_sync_at.
+        <fs_row>-last_sync_by  = ls_upd-last_sync_by.
+      ENDIF.
+    ENDLOOP.
+
+    IF lt_current IS NOT INITIAL.
+      UPDATE zinv_documentos FROM TABLE @lt_current.
+    ENDIF.
   ENDMETHOD.
 
   METHOD cleanup.
