@@ -52,7 +52,7 @@ CLASS zcl_mm_query_invent IMPLEMENTATION.
             INTO TABLE @DATA(lt_union_documentos).
 
           LOOP AT lt_union_documentos INTO DATA(lwa_union_documentos).
-            IF lwa_union_documentos-SyncStatusCode NOT IN lr_cancel.
+            IF to_upper( lwa_union_documentos-SyncStatusCode ) NOT IN lr_cancel.
               CONTINUE.
             ENDIF.
             APPEND INITIAL LINE TO lt_result ASSIGNING <fs_result>.
@@ -89,7 +89,7 @@ CLASS zcl_mm_query_invent IMPLEMENTATION.
               INTO TABLE @DATA(lt_zi_inv_delta_contabi).
 
             LOOP AT lt_zi_inv_delta_contabi INTO DATA(lwa_zi_inv_delta_contabi).
-              IF lwa_zi_inv_delta_contabi-SyncStatusCode NOT IN lr_cancel.
+              IF to_upper( lwa_zi_inv_delta_contabi-SyncStatusCode ) NOT IN lr_cancel.
                 CONTINUE.
               ENDIF.
               APPEND INITIAL LINE TO lt_result ASSIGNING <fs_result>.
@@ -110,7 +110,7 @@ CLASS zcl_mm_query_invent IMPLEMENTATION.
           ELSE.
 
             LOOP AT lt_zinv_documentos INTO DATA(lwa_zinv_documentos).
-              IF lwa_zinv_documentos-status NOT IN lr_cancel.
+              IF to_upper( lwa_zinv_documentos-status ) NOT IN lr_cancel.
                 CONTINUE.
               ENDIF.
               APPEND INITIAL LINE TO lt_result ASSIGNING <fs_result>.
