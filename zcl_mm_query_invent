@@ -39,6 +39,12 @@ CLASS zcl_mm_query_invent IMPLEMENTATION.
         DATA(lv_companycode) = CONV bukrs( get_filter_low( it_pairs = lt_pairs iv_name = 'COMPANYCODE' ) ).
         DATA(lv_inventorydocument) = CONV iblnr( get_filter_low( it_pairs = lt_pairs iv_name = 'INVENTORYDOCUMENT' ) ).
 
+        DATA lr_cancel TYPE RANGE OF zde_status.
+        lr_cancel = VALUE #(
+          ( sign = 'I' option = 'EQ' low = 'CANCELADO' )
+          ( sign = 'I' option = 'EQ' low = 'CANCEL_ENV' )
+          ( sign = 'I' option = 'EQ' low = 'CANCEL_ERR' ) ).
+
         IF lv_plant IS NOT INITIAL.
 
           SELECT *
@@ -46,6 +52,9 @@ CLASS zcl_mm_query_invent IMPLEMENTATION.
             INTO TABLE @DATA(lt_union_documentos).
 
           LOOP AT lt_union_documentos INTO DATA(lwa_union_documentos).
+            IF lwa_union_documentos-SyncStatusCode NOT IN lr_cancel.
+              CONTINUE.
+            ENDIF.
             APPEND INITIAL LINE TO lt_result ASSIGNING <fs_result>.
             <fs_result>-CompanyCode       = lwa_union_documentos-Bukrs.
             <fs_result>-InventoryDocument = lwa_union_documentos-InventoryDocument.
@@ -80,6 +89,9 @@ CLASS zcl_mm_query_invent IMPLEMENTATION.
               INTO TABLE @DATA(lt_zi_inv_delta_contabi).
 
             LOOP AT lt_zi_inv_delta_contabi INTO DATA(lwa_zi_inv_delta_contabi).
+              IF lwa_zi_inv_delta_contabi-SyncStatusCode NOT IN lr_cancel.
+                CONTINUE.
+              ENDIF.
               APPEND INITIAL LINE TO lt_result ASSIGNING <fs_result>.
               <fs_result>-CompanyCode       = lwa_zi_inv_delta_contabi-bukrs.
               <fs_result>-InventoryDocument = lwa_zi_inv_delta_contabi-InventoryDocument.
@@ -98,6 +110,9 @@ CLASS zcl_mm_query_invent IMPLEMENTATION.
           ELSE.
 
             LOOP AT lt_zinv_documentos INTO DATA(lwa_zinv_documentos).
+              IF lwa_zinv_documentos-status NOT IN lr_cancel.
+                CONTINUE.
+              ENDIF.
               APPEND INITIAL LINE TO lt_result ASSIGNING <fs_result>.
               <fs_result>-CompanyCode       = lwa_zinv_documentos-bukrs.
               <fs_result>-InventoryDocument = lwa_zinv_documentos-iblnr.
