@@ -436,22 +436,20 @@ CLASS lsc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD save.
-    LOOP AT lcl_buffer=>gt_zinv_update INTO DATA(ls_zinv).
-      UPDATE zinv_documentos
-        SET status        = @ls_zinv-status,
-            delta_id      = @ls_zinv-delta_id,
-            error_message = @ls_zinv-error_message,
-            last_sync_at  = @ls_zinv-last_sync_at,
-            last_sync_by  = @ls_zinv-last_sync_by
-        WHERE bukrs = @ls_zinv-bukrs
-          AND iblnr = @ls_zinv-iblnr
-          AND zeile = @ls_zinv-zeile
-          AND gjahr = @ls_zinv-gjahr.
+    IF lcl_buffer=>gt_zinv_update IS INITIAL.
+      RETURN.
+    ENDIF.
 
-      IF sy-subrc <> 0.
-        MODIFY zinv_documentos FROM @ls_zinv.
-      ENDIF.
-    ENDLOOP.
+    UPDATE zinv_documentos FROM @lcl_buffer=>gt_zinv_update AS upd
+      SET status        = @upd-status,
+          delta_id      = @upd-delta_id,
+          error_message = @upd-error_message,
+          last_sync_at  = @upd-last_sync_at,
+          last_sync_by  = @upd-last_sync_by
+      WHERE zinv_documentos~bukrs = @upd-bukrs
+        AND zinv_documentos~iblnr = @upd-iblnr
+        AND zinv_documentos~zeile = @upd-zeile
+        AND zinv_documentos~gjahr = @upd-gjahr.
   ENDMETHOD.
 
   METHOD cleanup.
