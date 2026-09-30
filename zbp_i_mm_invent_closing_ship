@@ -48,6 +48,7 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
       WHERE bukrs = @keys-CompanyCode
         AND iblnr = @keys-InventoryDocument
         AND gjahr = @keys-FiscalYear
+        AND status IN ( 'CANCELADO', 'CANCEL_ENV', 'CANCEL_ERR' )
       INTO TABLE @lt_zinv_documentos.
 
     SELECT *
@@ -56,6 +57,7 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
       WHERE bukrs             = @keys-CompanyCode
         AND inventorydocument = @keys-InventoryDocument
         AND fiscalyear        = @keys-FiscalYear
+        AND syncstatuscode IN ( 'CANCELADO', 'CANCEL_ENV', 'CANCEL_ERR' )
       INTO TABLE @lt_delta.
 
     LOOP AT lt_zinv_documentos INTO DATA(ls_z).
@@ -153,6 +155,7 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
       WHERE bukrs = @keys-CompanyCode
         AND iblnr = @keys-InventoryDocument
         AND gjahr = @keys-FiscalYear
+        AND status IN ( 'CANCELADO', 'CANCEL_ENV', 'CANCEL_ERR' )
       INTO TABLE @lt_zinv.
 
     SELECT *
@@ -161,6 +164,7 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
       WHERE bukrs             = @keys-CompanyCode
         AND inventorydocument = @keys-InventoryDocument
         AND fiscalyear        = @keys-FiscalYear
+        AND syncstatuscode IN ( 'CANCELADO', 'CANCEL_ENV', 'CANCEL_ERR' )
       INTO TABLE @lt_delta.
 
     LOOP AT lt_zinv INTO DATA(ls_z).
