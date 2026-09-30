@@ -41,6 +41,11 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
     DATA lt_delta TYPE STANDARD TABLE OF zi_inv_delta_contabi.
     DATA lt_delta_header TYPE HASHED TABLE OF zi_inv_delta_contabi
       WITH UNIQUE KEY bukrs inventorydocument fiscalyear.
+    DATA lr_cancel TYPE RANGE OF zde_status.
+    lr_cancel = VALUE #(
+      ( sign = 'I' option = 'EQ' low = 'CANCELADO' )
+      ( sign = 'I' option = 'EQ' low = 'CANCEL_ENV' )
+      ( sign = 'I' option = 'EQ' low = 'CANCEL_ERR' ) ).
 
     SELECT *
       FROM zinv_documentos
@@ -57,7 +62,6 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
       WHERE bukrs             = @keys-CompanyCode
         AND inventorydocument = @keys-InventoryDocument
         AND fiscalyear        = @keys-FiscalYear
-        AND syncstatuscode IN ( 'CANCELADO', 'CANCEL_ENV', 'CANCEL_ERR' )
       INTO TABLE @lt_delta.
 
     LOOP AT lt_zinv_documentos INTO DATA(ls_z).
@@ -73,6 +77,9 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
     ENDLOOP.
 
     LOOP AT lt_delta INTO DATA(ls_delta).
+      IF CONV zde_status( ls_delta-syncstatuscode ) NOT IN lr_cancel.
+        CONTINUE.
+      ENDIF.
       INSERT ls_delta INTO TABLE lt_delta_header.
     ENDLOOP.
 
@@ -148,6 +155,11 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
     DATA lt_zinv TYPE SORTED TABLE OF zinv_documentos
       WITH NON-UNIQUE KEY bukrs iblnr zeile gjahr.
     DATA lt_delta TYPE STANDARD TABLE OF zi_inv_delta_contabi.
+    DATA lr_cancel TYPE RANGE OF zde_status.
+    lr_cancel = VALUE #(
+      ( sign = 'I' option = 'EQ' low = 'CANCELADO' )
+      ( sign = 'I' option = 'EQ' low = 'CANCEL_ENV' )
+      ( sign = 'I' option = 'EQ' low = 'CANCEL_ERR' ) ).
 
     SELECT *
       FROM zinv_documentos
@@ -164,7 +176,6 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
       WHERE bukrs             = @keys-CompanyCode
         AND inventorydocument = @keys-InventoryDocument
         AND fiscalyear        = @keys-FiscalYear
-        AND syncstatuscode IN ( 'CANCELADO', 'CANCEL_ENV', 'CANCEL_ERR' )
       INTO TABLE @lt_delta.
 
     LOOP AT lt_zinv INTO DATA(ls_z).
@@ -190,6 +201,10 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
     ENDLOOP.
 
     LOOP AT lt_delta INTO DATA(ls_d).
+      IF CONV zde_status( ls_d-syncstatuscode ) NOT IN lr_cancel.
+        CONTINUE.
+      ENDIF.
+
       READ TABLE lt_zinv TRANSPORTING NO FIELDS
         WITH TABLE KEY bukrs = ls_d-bukrs
                        iblnr = ls_d-inventorydocument
