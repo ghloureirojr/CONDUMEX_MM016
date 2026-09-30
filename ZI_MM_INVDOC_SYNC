@@ -24,6 +24,6 @@ define view entity ZI_MM_INVDOC_SYNC
       delta_id      as DeltaId,
       error_message as ErrorMessage
 }
-where status = 'CANCELADO'
-   or status = 'CANCEL_ENV'
-   or status = 'CANCEL_ERR'
+where upper(status) = 'CANCELADO'
+   or upper(status) = 'CANCEL_ENV'
+   or upper(status) = 'CANCEL_ERR'
