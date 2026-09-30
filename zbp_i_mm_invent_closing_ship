@@ -53,7 +53,7 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
       WHERE bukrs = @keys-CompanyCode
         AND iblnr = @keys-InventoryDocument
         AND gjahr = @keys-FiscalYear
-        AND status IN ( 'CANCELADO', 'CANCEL_ENV', 'CANCEL_ERR' )
+        AND upper( status ) IN ( 'CANCELADO', 'CANCEL_ENV', 'CANCEL_ERR' )
       INTO TABLE @lt_zinv_documentos.
 
     SELECT *
@@ -77,7 +77,7 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
     ENDLOOP.
 
     LOOP AT lt_delta INTO DATA(ls_delta).
-      IF CONV zde_status( ls_delta-syncstatuscode ) NOT IN lr_cancel.
+      IF to_upper( ls_delta-syncstatuscode ) NOT IN lr_cancel.
         CONTINUE.
       ENDIF.
       INSERT ls_delta INTO TABLE lt_delta_header.
@@ -167,7 +167,7 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
       WHERE bukrs = @keys-CompanyCode
         AND iblnr = @keys-InventoryDocument
         AND gjahr = @keys-FiscalYear
-        AND status IN ( 'CANCELADO', 'CANCEL_ENV', 'CANCEL_ERR' )
+        AND upper( status ) IN ( 'CANCELADO', 'CANCEL_ENV', 'CANCEL_ERR' )
       INTO TABLE @lt_zinv.
 
     SELECT *
@@ -201,7 +201,7 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
     ENDLOOP.
 
     LOOP AT lt_delta INTO DATA(ls_d).
-      IF CONV zde_status( ls_d-syncstatuscode ) NOT IN lr_cancel.
+      IF to_upper( ls_d-syncstatuscode ) NOT IN lr_cancel.
         CONTINUE.
       ENDIF.
 
