@@ -282,7 +282,18 @@ CLASS zcl_inv_clo_cpi IMPLEMENTATION.
           lv_message = |Error de sistema/SOAP en doc { <fs_group>-inventorydocument }: { lo_sys_exception->get_text( ) }|.
       ENDTRY.
 
-      DATA(lv_status) = COND zde_status( WHEN lv_ok = abap_true THEN 'CANCEL_ENV' ELSE 'CANCEL_ERR' ).
+      DATA lv_prev TYPE zde_status.
+      LOOP AT GROUP <fs_group> ASSIGNING <fs_doc>.
+        lv_prev = to_upper( <fs_doc>-syncstatuscode ).
+        EXIT.
+      ENDLOOP.
+
+      DATA lv_status TYPE zde_status.
+      IF lv_prev = 'CANCELADO' OR lv_prev = 'CANCEL_ENV' OR lv_prev = 'CANCEL_ERR'.
+        lv_status = COND zde_status( WHEN lv_ok = abap_true THEN 'CANCEL_ENV' ELSE 'CANCEL_ERR' ).
+      ELSE.
+        lv_status = COND zde_status( WHEN lv_ok = abap_true THEN 'CONTADO_EN' ELSE 'CONTADO_ER' ).
+      ENDIF.
 
       LOOP AT GROUP <fs_group> ASSIGNING <fs_doc>.
         <fs_doc>-deltaid = lv_uuid.
