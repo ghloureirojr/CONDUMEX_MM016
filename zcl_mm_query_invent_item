@@ -49,8 +49,9 @@ CLASS zcl_mm_query_invent_item IMPLEMENTATION.
              physicalinventoryitemiszero   TYPE c LENGTH 1,
            END OF ty_released.
 
-    DATA lt_sync TYPE HASHED TABLE OF zi_mm_invdoc_sync
-      WITH UNIQUE KEY companycode inventorydocument fiscalyear inventorydocumentitem.
+    DATA lt_zinv TYPE STANDARD TABLE OF zinv_documentos.
+    DATA lt_z_idx TYPE HASHED TABLE OF zinv_documentos
+      WITH UNIQUE KEY zeile.
     DATA lt_released TYPE STANDARD TABLE OF ty_released.
     DATA lt_result TYPE HASHED TABLE OF zi_mm_invent_closing_item
       WITH UNIQUE KEY companycode inventorydocument fiscalyear inventorydocumentitem.
@@ -61,24 +62,42 @@ CLASS zcl_mm_query_invent_item IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    IF iv_item IS INITIAL.
-      SELECT *
-        FROM zi_mm_invdoc_sync
-        WHERE CompanyCode       = @iv_companycode
-          AND InventoryDocument = @iv_document
-          AND FiscalYear        = @iv_fiscalyear
-          AND upper( SyncStatusCode ) IN ( 'CANCELADO', 'CANCEL_ENV', 'CANCEL_ERR' )
-        INTO TABLE @lt_sync.
-    ELSE.
-      SELECT *
-        FROM zi_mm_invdoc_sync
-        WHERE CompanyCode            = @iv_companycode
-          AND InventoryDocument      = @iv_document
-          AND FiscalYear             = @iv_fiscalyear
-          AND InventoryDocumentItem  = @iv_item
-          AND upper( SyncStatusCode ) IN ( 'CANCELADO', 'CANCEL_ENV', 'CANCEL_ERR' )
-        INTO TABLE @lt_sync.
+    SELECT *
+      FROM zi_inv_delta_contabi
+      WHERE bukrs             = @iv_companycode
+        AND inventorydocument = @iv_document
+        AND fiscalyear        = @iv_fiscalyear
+      INTO TABLE @DATA(lt_delta).
+
+    IF lt_delta IS INITIAL.
+      RETURN.
     ENDIF.
+
+    IF iv_item IS NOT INITIAL.
+      READ TABLE lt_delta TRANSPORTING NO FIELDS
+        WITH KEY inventorydocumentitem = iv_item.
+      IF sy-subrc <> 0.
+        RETURN.
+      ENDIF.
+    ENDIF.
+
+    SELECT *
+      FROM zinv_documentos
+      WHERE bukrs = @iv_companycode
+        AND iblnr = @iv_document
+        AND gjahr = @iv_fiscalyear
+      INTO TABLE @lt_zinv.
+
+    LOOP AT lt_zinv INTO DATA(ls_z_key).
+      IF iv_item IS NOT INITIAL AND ls_z_key-zeile <> iv_item.
+        CONTINUE.
+      ENDIF.
+      DATA(lv_doc_status) = to_upper( ls_z_key-status ).
+      IF lv_doc_status = 'CANCELADO' OR lv_doc_status = 'CANCEL_ENV' OR lv_doc_status = 'CANCEL_ERR'.
+        RETURN.
+      ENDIF.
+      INSERT ls_z_key INTO TABLE lt_z_idx.
+    ENDLOOP.
 
     IF iv_item IS INITIAL.
       SELECT
@@ -126,6 +145,20 @@ CLASS zcl_mm_query_invent_item IMPLEMENTATION.
     ENDIF.
 
     LOOP AT lt_released INTO DATA(ls_released).
+      DATA lv_sync TYPE zde_status.
+      lv_sync = 'CONTADO'.
+      READ TABLE lt_z_idx INTO DATA(ls_z_item)
+        WITH TABLE KEY zeile = ls_released-PhysicalInventoryDocumentItem.
+      IF sy-subrc = 0.
+        DATA(lv_item_status) = to_upper( ls_z_item-status ).
+        IF lv_item_status = 'CONTADO_EN'.
+          CONTINUE.
+        ENDIF.
+        IF lv_item_status = 'CONTADO_ER'.
+          lv_sync = 'CONTADO_ER'.
+        ENDIF.
+      ENDIF.
+
       INSERT VALUE #(
         CompanyCode           = iv_companycode
         InventoryDocument     = ls_released-PhysicalInventoryDocument
@@ -139,49 +172,8 @@ CLASS zcl_mm_query_invent_item IMPLEMENTATION.
         Quantity              = ls_released-QuantityInUnitOfEntry
         QuantityZero          = ls_released-PhysicalInventoryItemIsZero
         BaseUnit              = ls_released-UnitOfEntry
+        SyncStatusCode        = lv_sync
       ) INTO TABLE lt_result.
-    ENDLOOP.
-
-    LOOP AT lt_sync INTO DATA(ls_sync).
-      READ TABLE lt_result ASSIGNING FIELD-SYMBOL(<fs_item>)
-        WITH TABLE KEY companycode           = ls_sync-CompanyCode
-                       inventorydocument     = ls_sync-InventoryDocument
-                       fiscalyear            = ls_sync-FiscalYear
-                       inventorydocumentitem = ls_sync-InventoryDocumentItem.
-      IF sy-subrc <> 0.
-        INSERT VALUE #(
-          CompanyCode           = ls_sync-CompanyCode
-          InventoryDocument     = ls_sync-InventoryDocument
-          FiscalYear            = ls_sync-FiscalYear
-          InventoryDocumentItem = ls_sync-InventoryDocumentItem
-        ) INTO TABLE lt_result.
-        READ TABLE lt_result ASSIGNING <fs_item>
-          WITH TABLE KEY companycode           = ls_sync-CompanyCode
-                         inventorydocument     = ls_sync-InventoryDocument
-                         fiscalyear            = ls_sync-FiscalYear
-                         inventorydocumentitem = ls_sync-InventoryDocumentItem.
-      ENDIF.
-      <fs_item>-Plant           = ls_sync-Plant.
-      <fs_item>-StorageLocation = ls_sync-StorageLocation.
-      <fs_item>-Material        = ls_sync-Material.
-      <fs_item>-DocumentDate    = ls_sync-DocumentDate.
-      <fs_item>-PostingDate     = ls_sync-PostingDate.
-      <fs_item>-Quantity        = ls_sync-Quantity.
-      <fs_item>-QuantityZero    = ls_sync-QuantityZero.
-      <fs_item>-BaseUnit        = ls_sync-BaseUnit.
-      <fs_item>-SyncStatusCode  = ls_sync-SyncStatusCode.
-    ENDLOOP.
-
-    DATA lr_cancel TYPE RANGE OF zde_status.
-    lr_cancel = VALUE #(
-      ( sign = 'I' option = 'EQ' low = 'CANCELADO' )
-      ( sign = 'I' option = 'EQ' low = 'CANCEL_ENV' )
-      ( sign = 'I' option = 'EQ' low = 'CANCEL_ERR' ) ).
-
-    LOOP AT lt_result INTO DATA(ls_keep).
-      IF to_upper( ls_keep-SyncStatusCode ) NOT IN lr_cancel.
-        DELETE TABLE lt_result FROM ls_keep.
-      ENDIF.
     ENDLOOP.
 
     rt_item = VALUE #( FOR ls_item IN lt_result ( ls_item ) ).
