@@ -35,17 +35,25 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
       RETURN.
     ENDIF.
 
+    TYPES: BEGIN OF ty_doc_flag,
+             bukrs      TYPE bukrs,
+             iblnr      TYPE iblnr,
+             gjahr      TYPE gjahr,
+             has_cancel TYPE abap_bool,
+             has_error  TYPE abap_bool,
+             has_final  TYPE abap_bool,
+             has_open   TYPE abap_bool,
+             z_count    TYPE i,
+           END OF ty_doc_flag.
+
     DATA lt_zinv_documentos TYPE STANDARD TABLE OF zinv_documentos.
     DATA lt_zinv_header TYPE HASHED TABLE OF zinv_documentos
       WITH UNIQUE KEY bukrs iblnr gjahr.
     DATA lt_delta TYPE STANDARD TABLE OF zi_inv_delta_contabi.
     DATA lt_delta_header TYPE HASHED TABLE OF zi_inv_delta_contabi
       WITH UNIQUE KEY bukrs inventorydocument fiscalyear.
-    DATA lr_cancel TYPE RANGE OF zde_status.
-    lr_cancel = VALUE #(
-      ( sign = 'I' option = 'EQ' low = 'CANCELADO' )
-      ( sign = 'I' option = 'EQ' low = 'CANCEL_ENV' )
-      ( sign = 'I' option = 'EQ' low = 'CANCEL_ERR' ) ).
+    DATA lt_flag TYPE HASHED TABLE OF ty_doc_flag
+      WITH UNIQUE KEY bukrs iblnr gjahr.
 
     SELECT *
       FROM zinv_documentos
@@ -53,7 +61,6 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
       WHERE bukrs = @keys-CompanyCode
         AND iblnr = @keys-InventoryDocument
         AND gjahr = @keys-FiscalYear
-        AND upper( status ) IN ( 'CANCELADO', 'CANCEL_ENV', 'CANCEL_ERR' )
       INTO TABLE @lt_zinv_documentos.
 
     SELECT *
@@ -65,61 +72,109 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
       INTO TABLE @lt_delta.
 
     LOOP AT lt_zinv_documentos INTO DATA(ls_z).
+      DATA(lv_status_up) = to_upper( ls_z-status ).
+
+      READ TABLE lt_flag ASSIGNING FIELD-SYMBOL(<fs_flag>)
+        WITH TABLE KEY bukrs = ls_z-bukrs
+                       iblnr = ls_z-iblnr
+                       gjahr = ls_z-gjahr.
+      IF sy-subrc <> 0.
+        INSERT VALUE #(
+          bukrs = ls_z-bukrs
+          iblnr = ls_z-iblnr
+          gjahr = ls_z-gjahr
+        ) INTO TABLE lt_flag.
+        READ TABLE lt_flag ASSIGNING <fs_flag>
+          WITH TABLE KEY bukrs = ls_z-bukrs
+                         iblnr = ls_z-iblnr
+                         gjahr = ls_z-gjahr.
+      ENDIF.
+      <fs_flag>-z_count = <fs_flag>-z_count + 1.
+      IF lv_status_up = 'CONTADO_EN'.
+        <fs_flag>-has_final = abap_true.
+      ELSEIF lv_status_up = 'CONTADO_ER'.
+        <fs_flag>-has_error = abap_true.
+      ELSEIF lv_status_up = 'CANCELADO' OR lv_status_up = 'CANCEL_ENV' OR lv_status_up = 'CANCEL_ERR'.
+        <fs_flag>-has_cancel = abap_true.
+      ELSE.
+        <fs_flag>-has_open = abap_true.
+      ENDIF.
+
       READ TABLE lt_zinv_header ASSIGNING FIELD-SYMBOL(<fs_header>)
         WITH TABLE KEY bukrs = ls_z-bukrs
                        iblnr = ls_z-iblnr
                        gjahr = ls_z-gjahr.
       IF sy-subrc <> 0.
         INSERT ls_z INTO TABLE lt_zinv_header.
-      ELSEIF ls_z-last_sync_at > <fs_header>-last_sync_at.
+      ELSEIF lv_status_up = 'CONTADO_ER'.
         <fs_header> = ls_z.
       ENDIF.
     ENDLOOP.
 
     LOOP AT lt_delta INTO DATA(ls_delta).
-      IF to_upper( ls_delta-syncstatuscode ) NOT IN lr_cancel.
-        CONTINUE.
+      READ TABLE lt_delta_header TRANSPORTING NO FIELDS
+        WITH TABLE KEY bukrs             = ls_delta-bukrs
+                       inventorydocument = ls_delta-inventorydocument
+                       fiscalyear        = ls_delta-fiscalyear.
+      IF sy-subrc <> 0.
+        INSERT ls_delta INTO TABLE lt_delta_header.
       ENDIF.
-      INSERT ls_delta INTO TABLE lt_delta_header.
     ENDLOOP.
 
     LOOP AT keys INTO DATA(ls_key).
+      READ TABLE lt_delta_header INTO DATA(ls_d)
+        WITH TABLE KEY bukrs             = ls_key-CompanyCode
+                       inventorydocument = ls_key-InventoryDocument
+                       fiscalyear        = ls_key-FiscalYear.
+      IF sy-subrc <> 0.
+        CONTINUE.
+      ENDIF.
+
+      DATA ls_flag TYPE ty_doc_flag.
+      READ TABLE lt_flag INTO ls_flag
+        WITH TABLE KEY bukrs = ls_key-CompanyCode
+                       iblnr = ls_key-InventoryDocument
+                       gjahr = ls_key-FiscalYear.
+      IF sy-subrc = 0.
+        IF ls_flag-has_cancel = abap_true.
+          CONTINUE.
+        ENDIF.
+        IF ls_flag-z_count > 0
+           AND ls_flag-has_final = abap_true
+           AND ls_flag-has_error = abap_false
+           AND ls_flag-has_open = abap_false.
+          CONTINUE.
+        ENDIF.
+      ELSE.
+        CLEAR ls_flag.
+      ENDIF.
+
       APPEND INITIAL LINE TO result ASSIGNING <fs_result>.
       <fs_result>-CompanyCode       = ls_key-CompanyCode.
       <fs_result>-InventoryDocument = ls_key-InventoryDocument.
       <fs_result>-FiscalYear        = ls_key-FiscalYear.
+      <fs_result>-Plant             = ls_d-plant.
+      <fs_result>-Almacen           = ls_d-almacen.
+      <fs_result>-DocumentDate      = ls_d-documentdate.
+      <fs_result>-SyncStatusCode    = COND #( WHEN ls_flag-has_error = abap_true THEN 'CONTADO_ER' ELSE 'CONTADO' ).
+      <fs_result>-Nameupd           = ls_d-nameupd.
+      <fs_result>-LastSyncAt        = ls_d-lastsyncat.
+      <fs_result>-DeltaId           = ls_d-deltaid.
+      <fs_result>-ErrorMessage      = ls_d-errormessage.
+      <fs_result>-DocumentDateConta = ls_d-documentdateconta.
 
       READ TABLE lt_zinv_header INTO DATA(ls_header)
         WITH TABLE KEY bukrs = ls_key-CompanyCode
                        iblnr = ls_key-InventoryDocument
                        gjahr = ls_key-FiscalYear.
       IF sy-subrc = 0.
-        <fs_result>-Plant             = ls_header-werks.
-        <fs_result>-Almacen           = ls_header-lgort.
-        <fs_result>-DocumentDate      = ls_header-bldat.
-        <fs_result>-SyncStatusCode    = ls_header-status.
-        <fs_result>-Nameupd           = ls_header-last_sync_by.
-        <fs_result>-LastSyncAt        = ls_header-last_sync_at.
-        <fs_result>-DeltaId           = ls_header-delta_id.
-        <fs_result>-ErrorMessage      = ls_header-error_message.
-        <fs_result>-DocumentDateConta = ls_header-budat.
-        CONTINUE.
-      ENDIF.
-
-      READ TABLE lt_delta_header INTO DATA(ls_d)
-        WITH TABLE KEY bukrs             = ls_key-CompanyCode
-                       inventorydocument = ls_key-InventoryDocument
-                       fiscalyear        = ls_key-FiscalYear.
-      IF sy-subrc = 0.
-        <fs_result>-Plant             = ls_d-plant.
-        <fs_result>-Almacen           = ls_d-almacen.
-        <fs_result>-DocumentDate      = ls_d-documentdate.
-        <fs_result>-SyncStatusCode    = ls_d-syncstatuscode.
-        <fs_result>-Nameupd           = ls_d-nameupd.
-        <fs_result>-LastSyncAt        = ls_d-lastsyncat.
-        <fs_result>-DeltaId           = ls_d-deltaid.
-        <fs_result>-ErrorMessage      = ls_d-errormessage.
-        <fs_result>-DocumentDateConta = ls_d-documentdateconta.
+        <fs_result>-Nameupd      = ls_header-last_sync_by.
+        <fs_result>-LastSyncAt   = ls_header-last_sync_at.
+        <fs_result>-DeltaId      = ls_header-delta_id.
+        <fs_result>-ErrorMessage = ls_header-error_message.
+        IF ls_header-budat IS NOT INITIAL.
+          <fs_result>-DocumentDateConta = ls_header-budat.
+        ENDIF.
       ENDIF.
     ENDLOOP.
   ENDMETHOD.
@@ -152,14 +207,23 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
 
     INSERT LINES OF keys INTO TABLE lt_action_keys.
 
-    DATA lt_zinv TYPE SORTED TABLE OF zinv_documentos
-      WITH NON-UNIQUE KEY bukrs iblnr zeile gjahr.
+    TYPES: BEGIN OF ty_doc_flag,
+             bukrs      TYPE bukrs,
+             iblnr      TYPE iblnr,
+             gjahr      TYPE gjahr,
+             has_cancel TYPE abap_bool,
+             has_error  TYPE abap_bool,
+             has_final  TYPE abap_bool,
+             has_open   TYPE abap_bool,
+             z_count    TYPE i,
+           END OF ty_doc_flag.
+
+    DATA lt_zinv TYPE STANDARD TABLE OF zinv_documentos.
+    DATA lt_z_idx TYPE HASHED TABLE OF zinv_documentos
+      WITH UNIQUE KEY bukrs iblnr zeile gjahr.
     DATA lt_delta TYPE STANDARD TABLE OF zi_inv_delta_contabi.
-    DATA lr_cancel TYPE RANGE OF zde_status.
-    lr_cancel = VALUE #(
-      ( sign = 'I' option = 'EQ' low = 'CANCELADO' )
-      ( sign = 'I' option = 'EQ' low = 'CANCEL_ENV' )
-      ( sign = 'I' option = 'EQ' low = 'CANCEL_ERR' ) ).
+    DATA lt_flag TYPE HASHED TABLE OF ty_doc_flag
+      WITH UNIQUE KEY bukrs iblnr gjahr.
 
     SELECT *
       FROM zinv_documentos
@@ -167,7 +231,6 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
       WHERE bukrs = @keys-CompanyCode
         AND iblnr = @keys-InventoryDocument
         AND gjahr = @keys-FiscalYear
-        AND upper( status ) IN ( 'CANCELADO', 'CANCEL_ENV', 'CANCEL_ERR' )
       INTO TABLE @lt_zinv.
 
     SELECT *
@@ -178,61 +241,108 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
         AND fiscalyear        = @keys-FiscalYear
       INTO TABLE @lt_delta.
 
-    LOOP AT lt_zinv INTO DATA(ls_z).
-      APPEND VALUE #(
-        bukrs             = ls_z-bukrs
-        inventorydocument = ls_z-iblnr
-        fiscalyear        = ls_z-gjahr
-        plant             = ls_z-werks
-        almacen           = ls_z-lgort
-        material          = ls_z-matnr
-        item              = ls_z-zeile
-        documentdate      = ls_z-bldat
-        quantity          = ls_z-erfmg
-        quantityzero      = ls_z-xnull
-        baseunitofmeasure = ls_z-meins
-        syncstatuscode    = ls_z-status
-        nameupd           = ls_z-last_sync_by
-        lastsyncat        = ls_z-last_sync_at
-        deltaid           = ls_z-delta_id
-        menerror          = ls_z-error_message
-        documentdateconta = ls_z-budat
-      ) TO lt_data.
+    LOOP AT lt_zinv INTO DATA(ls_zflag).
+      DATA(lv_status_up) = to_upper( ls_zflag-status ).
+      READ TABLE lt_flag ASSIGNING FIELD-SYMBOL(<fs_flag>)
+        WITH TABLE KEY bukrs = ls_zflag-bukrs
+                       iblnr = ls_zflag-iblnr
+                       gjahr = ls_zflag-gjahr.
+      IF sy-subrc <> 0.
+        INSERT VALUE #(
+          bukrs = ls_zflag-bukrs
+          iblnr = ls_zflag-iblnr
+          gjahr = ls_zflag-gjahr
+        ) INTO TABLE lt_flag.
+        READ TABLE lt_flag ASSIGNING <fs_flag>
+          WITH TABLE KEY bukrs = ls_zflag-bukrs
+                         iblnr = ls_zflag-iblnr
+                         gjahr = ls_zflag-gjahr.
+      ENDIF.
+      <fs_flag>-z_count = <fs_flag>-z_count + 1.
+      IF lv_status_up = 'CONTADO_EN'.
+        <fs_flag>-has_final = abap_true.
+      ELSEIF lv_status_up = 'CONTADO_ER'.
+        <fs_flag>-has_error = abap_true.
+      ELSEIF lv_status_up = 'CANCELADO' OR lv_status_up = 'CANCEL_ENV' OR lv_status_up = 'CANCEL_ERR'.
+        <fs_flag>-has_cancel = abap_true.
+      ELSE.
+        <fs_flag>-has_open = abap_true.
+      ENDIF.
     ENDLOOP.
 
+    INSERT LINES OF lt_zinv INTO TABLE lt_z_idx.
+
     LOOP AT lt_delta INTO DATA(ls_d).
-      IF to_upper( ls_d-syncstatuscode ) NOT IN lr_cancel.
-        CONTINUE.
+      DATA ls_flag TYPE ty_doc_flag.
+      READ TABLE lt_flag INTO ls_flag
+        WITH TABLE KEY bukrs = ls_d-bukrs
+                       iblnr = ls_d-inventorydocument
+                       gjahr = ls_d-fiscalyear.
+      IF sy-subrc = 0.
+        IF ls_flag-has_cancel = abap_true.
+          CONTINUE.
+        ENDIF.
+        IF ls_flag-z_count > 0
+           AND ls_flag-has_final = abap_true
+           AND ls_flag-has_error = abap_false
+           AND ls_flag-has_open = abap_false.
+          CONTINUE.
+        ENDIF.
       ENDIF.
 
-      READ TABLE lt_zinv TRANSPORTING NO FIELDS
+      READ TABLE lt_z_idx INTO DATA(ls_z)
         WITH TABLE KEY bukrs = ls_d-bukrs
                        iblnr = ls_d-inventorydocument
                        zeile = ls_d-inventorydocumentitem
                        gjahr = ls_d-fiscalyear.
       IF sy-subrc = 0.
-        CONTINUE.
+        DATA(lv_item_status) = to_upper( ls_z-status ).
+        IF lv_item_status = 'CONTADO_EN'
+           OR lv_item_status = 'CANCELADO'
+           OR lv_item_status = 'CANCEL_ENV'
+           OR lv_item_status = 'CANCEL_ERR'.
+          CONTINUE.
+        ENDIF.
+        APPEND VALUE #(
+          bukrs             = ls_z-bukrs
+          inventorydocument = ls_z-iblnr
+          fiscalyear        = ls_z-gjahr
+          plant             = ls_z-werks
+          almacen           = ls_z-lgort
+          material          = ls_z-matnr
+          item              = ls_z-zeile
+          documentdate      = ls_z-bldat
+          quantity          = ls_z-erfmg
+          quantityzero      = ls_z-xnull
+          baseunitofmeasure = ls_z-meins
+          syncstatuscode    = ls_z-status
+          nameupd           = ls_z-last_sync_by
+          lastsyncat        = ls_z-last_sync_at
+          deltaid           = ls_z-delta_id
+          menerror          = ls_z-error_message
+          documentdateconta = ls_z-budat
+        ) TO lt_data.
+      ELSE.
+        APPEND VALUE #(
+          bukrs             = ls_d-bukrs
+          inventorydocument = ls_d-inventorydocument
+          fiscalyear        = ls_d-fiscalyear
+          plant             = ls_d-plant
+          almacen           = ls_d-almacen
+          material          = ls_d-material
+          item              = ls_d-inventorydocumentitem
+          documentdate      = ls_d-documentdate
+          quantity          = ls_d-quantity
+          quantityzero      = ls_d-quantityzero
+          baseunitofmeasure = ls_d-baseunitofmeasure
+          syncstatuscode    = 'CONTADO'
+          nameupd           = ls_d-nameupd
+          lastsyncat        = ls_d-lastsyncat
+          deltaid           = ls_d-deltaid
+          menerror          = ls_d-errormessage
+          documentdateconta = ls_d-documentdateconta
+        ) TO lt_data.
       ENDIF.
-
-      APPEND VALUE #(
-        bukrs             = ls_d-bukrs
-        inventorydocument = ls_d-inventorydocument
-        fiscalyear        = ls_d-fiscalyear
-        plant             = ls_d-plant
-        almacen           = ls_d-almacen
-        material          = ls_d-material
-        item              = ls_d-inventorydocumentitem
-        documentdate      = ls_d-documentdate
-        quantity          = ls_d-quantity
-        quantityzero      = ls_d-quantityzero
-        baseunitofmeasure = ls_d-baseunitofmeasure
-        syncstatuscode    = ls_d-syncstatuscode
-        nameupd           = ls_d-nameupd
-        lastsyncat        = ls_d-lastsyncat
-        deltaid           = ls_d-deltaid
-        menerror          = ls_d-errormessage
-        documentdateconta = ls_d-documentdateconta
-      ) TO lt_data.
     ENDLOOP.
 
     IF lt_data IS INITIAL.
@@ -473,6 +583,26 @@ CLASS lsc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
 
     IF lt_current IS NOT INITIAL.
       UPDATE zinv_documentos FROM TABLE @lt_current.
+    ENDIF.
+
+    DATA lt_current_idx TYPE HASHED TABLE OF zinv_documentos
+      WITH UNIQUE KEY bukrs iblnr zeile gjahr.
+    INSERT LINES OF lt_current INTO TABLE lt_current_idx.
+
+    DATA lt_insert TYPE STANDARD TABLE OF zinv_documentos.
+    LOOP AT lt_update INTO DATA(ls_new).
+      READ TABLE lt_current_idx TRANSPORTING NO FIELDS
+        WITH TABLE KEY bukrs = ls_new-bukrs
+                       iblnr = ls_new-iblnr
+                       zeile = ls_new-zeile
+                       gjahr = ls_new-gjahr.
+      IF sy-subrc <> 0.
+        APPEND ls_new TO lt_insert.
+      ENDIF.
+    ENDLOOP.
+
+    IF lt_insert IS NOT INITIAL.
+      INSERT zinv_documentos FROM TABLE @lt_insert.
     ENDIF.
   ENDMETHOD.
 
