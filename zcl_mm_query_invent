@@ -39,98 +39,166 @@ CLASS zcl_mm_query_invent IMPLEMENTATION.
         DATA(lv_companycode) = CONV bukrs( get_filter_low( it_pairs = lt_pairs iv_name = 'COMPANYCODE' ) ).
         DATA(lv_inventorydocument) = CONV iblnr( get_filter_low( it_pairs = lt_pairs iv_name = 'INVENTORYDOCUMENT' ) ).
 
-        DATA lr_cancel TYPE RANGE OF zde_status.
-        lr_cancel = VALUE #(
-          ( sign = 'I' option = 'EQ' low = 'CANCELADO' )
-          ( sign = 'I' option = 'EQ' low = 'CANCEL_ENV' )
-          ( sign = 'I' option = 'EQ' low = 'CANCEL_ERR' ) ).
+        DATA lt_delta TYPE STANDARD TABLE OF zi_inv_delta_contabi.
+        DATA lt_zdoc  TYPE STANDARD TABLE OF zinv_documentos.
 
         IF lv_plant IS NOT INITIAL.
 
           SELECT *
-            FROM zi_union_documentos( p_fiscalyear = @lv_fiscalyear, p_plant = @lv_plant )
-            INTO TABLE @DATA(lt_union_documentos).
+            FROM zi_inv_delta_contabi
+            WHERE fiscalyear = @lv_fiscalyear
+              AND plant      = @lv_plant
+            INTO TABLE @lt_delta.
 
-          LOOP AT lt_union_documentos INTO DATA(lwa_union_documentos).
-            IF to_upper( lwa_union_documentos-SyncStatusCode ) NOT IN lr_cancel.
-              CONTINUE.
-            ENDIF.
-            APPEND INITIAL LINE TO lt_result ASSIGNING <fs_result>.
-            <fs_result>-CompanyCode       = lwa_union_documentos-Bukrs.
-            <fs_result>-InventoryDocument = lwa_union_documentos-InventoryDocument.
-            <fs_result>-FiscalYear        = lwa_union_documentos-FiscalYear.
-            <fs_result>-Plant             = lwa_union_documentos-Plant.
-            <fs_result>-Almacen           = lwa_union_documentos-Almacen.
-            <fs_result>-DocumentDate      = lwa_union_documentos-DocumentDate.
-            <fs_result>-SyncStatusCode    = lwa_union_documentos-SyncStatusCode.
-            <fs_result>-Nameupd           = lwa_union_documentos-Nameupd.
-            <fs_result>-LastSyncAt        = lwa_union_documentos-LastSyncAt.
-            <fs_result>-DeltaId           = lwa_union_documentos-DeltaID.
-            <fs_result>-ErrorMessage      = lwa_union_documentos-ErrorMessage.
-            <fs_result>-DocumentDateConta = lwa_union_documentos-DocumentDateConta.
-          ENDLOOP.
+          SELECT *
+            FROM zinv_documentos
+            WHERE gjahr = @lv_fiscalyear
+              AND werks = @lv_plant
+            INTO TABLE @lt_zdoc.
 
         ELSEIF lv_inventorydocument IS NOT INITIAL.
+
+          SELECT *
+            FROM zi_inv_delta_contabi
+            WHERE bukrs             = @lv_companycode
+              AND inventorydocument = @lv_inventorydocument
+              AND fiscalyear        = @lv_fiscalyear
+            INTO TABLE @lt_delta.
 
           SELECT *
             FROM zinv_documentos
             WHERE bukrs = @lv_companycode
               AND iblnr = @lv_inventorydocument
               AND gjahr = @lv_fiscalyear
-            INTO TABLE @DATA(lt_zinv_documentos).
-
-          IF lt_zinv_documentos IS INITIAL.
-
-            SELECT *
-              FROM zi_inv_delta_contabi
-              WHERE bukrs             = @lv_companycode
-                AND inventorydocument = @lv_inventorydocument
-                AND fiscalyear        = @lv_fiscalyear
-              INTO TABLE @DATA(lt_zi_inv_delta_contabi).
-
-            LOOP AT lt_zi_inv_delta_contabi INTO DATA(lwa_zi_inv_delta_contabi).
-              IF to_upper( lwa_zi_inv_delta_contabi-SyncStatusCode ) NOT IN lr_cancel.
-                CONTINUE.
-              ENDIF.
-              APPEND INITIAL LINE TO lt_result ASSIGNING <fs_result>.
-              <fs_result>-CompanyCode       = lwa_zi_inv_delta_contabi-bukrs.
-              <fs_result>-InventoryDocument = lwa_zi_inv_delta_contabi-InventoryDocument.
-              <fs_result>-FiscalYear        = lwa_zi_inv_delta_contabi-FiscalYear.
-              <fs_result>-Plant             = lwa_zi_inv_delta_contabi-Plant.
-              <fs_result>-Almacen           = lwa_zi_inv_delta_contabi-Almacen.
-              <fs_result>-DocumentDate      = lwa_zi_inv_delta_contabi-DocumentDate.
-              <fs_result>-SyncStatusCode    = lwa_zi_inv_delta_contabi-SyncStatusCode.
-              <fs_result>-Nameupd           = lwa_zi_inv_delta_contabi-Nameupd.
-              <fs_result>-LastSyncAt        = lwa_zi_inv_delta_contabi-LastSyncAt.
-              <fs_result>-DeltaId           = lwa_zi_inv_delta_contabi-DeltaID.
-              <fs_result>-ErrorMessage      = lwa_zi_inv_delta_contabi-ErrorMessage.
-              <fs_result>-DocumentDateConta = lwa_zi_inv_delta_contabi-DocumentDateConta.
-            ENDLOOP.
-
-          ELSE.
-
-            LOOP AT lt_zinv_documentos INTO DATA(lwa_zinv_documentos).
-              IF to_upper( lwa_zinv_documentos-status ) NOT IN lr_cancel.
-                CONTINUE.
-              ENDIF.
-              APPEND INITIAL LINE TO lt_result ASSIGNING <fs_result>.
-              <fs_result>-CompanyCode       = lwa_zinv_documentos-bukrs.
-              <fs_result>-InventoryDocument = lwa_zinv_documentos-iblnr.
-              <fs_result>-FiscalYear        = lwa_zinv_documentos-gjahr.
-              <fs_result>-Plant             = lwa_zinv_documentos-werks.
-              <fs_result>-Almacen           = lwa_zinv_documentos-lgort.
-              <fs_result>-DocumentDate      = lwa_zinv_documentos-bldat.
-              <fs_result>-SyncStatusCode    = lwa_zinv_documentos-status.
-              <fs_result>-Nameupd           = lwa_zinv_documentos-last_sync_by.
-              <fs_result>-LastSyncAt        = lwa_zinv_documentos-last_sync_at.
-              <fs_result>-DeltaId           = lwa_zinv_documentos-delta_id.
-              <fs_result>-ErrorMessage      = lwa_zinv_documentos-error_message.
-              <fs_result>-DocumentDateConta = lwa_zinv_documentos-budat.
-            ENDLOOP.
-
-          ENDIF.
+            INTO TABLE @lt_zdoc.
 
         ENDIF.
+
+        TYPES: BEGIN OF ty_doc_flag,
+                 bukrs      TYPE bukrs,
+                 iblnr      TYPE iblnr,
+                 gjahr      TYPE gjahr,
+                 has_cancel TYPE abap_bool,
+                 has_error  TYPE abap_bool,
+                 has_final  TYPE abap_bool,
+                 has_open   TYPE abap_bool,
+                 z_count    TYPE i,
+               END OF ty_doc_flag.
+
+        DATA lt_flag TYPE HASHED TABLE OF ty_doc_flag
+          WITH UNIQUE KEY bukrs iblnr gjahr.
+        DATA lt_z_header TYPE HASHED TABLE OF zinv_documentos
+          WITH UNIQUE KEY bukrs iblnr gjahr.
+
+        LOOP AT lt_zdoc INTO DATA(ls_zdoc).
+          DATA(lv_status_up) = to_upper( ls_zdoc-status ).
+
+          READ TABLE lt_flag ASSIGNING FIELD-SYMBOL(<fs_flag>)
+            WITH TABLE KEY bukrs = ls_zdoc-bukrs
+                           iblnr = ls_zdoc-iblnr
+                           gjahr = ls_zdoc-gjahr.
+          IF sy-subrc <> 0.
+            INSERT VALUE #(
+              bukrs = ls_zdoc-bukrs
+              iblnr = ls_zdoc-iblnr
+              gjahr = ls_zdoc-gjahr
+            ) INTO TABLE lt_flag.
+            READ TABLE lt_flag ASSIGNING <fs_flag>
+              WITH TABLE KEY bukrs = ls_zdoc-bukrs
+                             iblnr = ls_zdoc-iblnr
+                             gjahr = ls_zdoc-gjahr.
+          ENDIF.
+          <fs_flag>-z_count = <fs_flag>-z_count + 1.
+          IF lv_status_up = 'CONTADO_EN'.
+            <fs_flag>-has_final = abap_true.
+          ELSEIF lv_status_up = 'CONTADO_ER'.
+            <fs_flag>-has_error = abap_true.
+          ELSEIF lv_status_up = 'CANCELADO' OR lv_status_up = 'CANCEL_ENV' OR lv_status_up = 'CANCEL_ERR'.
+            <fs_flag>-has_cancel = abap_true.
+          ELSE.
+            <fs_flag>-has_open = abap_true.
+          ENDIF.
+
+          READ TABLE lt_z_header ASSIGNING FIELD-SYMBOL(<fs_z_header>)
+            WITH TABLE KEY bukrs = ls_zdoc-bukrs
+                           iblnr = ls_zdoc-iblnr
+                           gjahr = ls_zdoc-gjahr.
+          IF sy-subrc <> 0.
+            INSERT ls_zdoc INTO TABLE lt_z_header.
+          ELSEIF lv_status_up = 'CONTADO_ER'.
+            <fs_z_header> = ls_zdoc.
+          ENDIF.
+        ENDLOOP.
+
+        TYPES: BEGIN OF ty_seen,
+                 bukrs TYPE bukrs,
+                 iblnr TYPE iblnr,
+                 gjahr TYPE gjahr,
+               END OF ty_seen.
+        DATA lt_seen TYPE HASHED TABLE OF ty_seen
+          WITH UNIQUE KEY bukrs iblnr gjahr.
+
+        LOOP AT lt_delta INTO DATA(ls_delta).
+          READ TABLE lt_seen TRANSPORTING NO FIELDS
+            WITH TABLE KEY bukrs = ls_delta-bukrs
+                           iblnr = ls_delta-inventorydocument
+                           gjahr = ls_delta-fiscalyear.
+          IF sy-subrc = 0.
+            CONTINUE.
+          ENDIF.
+          INSERT VALUE #(
+            bukrs = ls_delta-bukrs
+            iblnr = ls_delta-inventorydocument
+            gjahr = ls_delta-fiscalyear
+          ) INTO TABLE lt_seen.
+
+          DATA ls_flag TYPE ty_doc_flag.
+          READ TABLE lt_flag INTO ls_flag
+            WITH TABLE KEY bukrs = ls_delta-bukrs
+                           iblnr = ls_delta-inventorydocument
+                           gjahr = ls_delta-fiscalyear.
+          IF sy-subrc = 0.
+            IF ls_flag-has_cancel = abap_true.
+              CONTINUE.
+            ENDIF.
+            IF ls_flag-z_count > 0
+               AND ls_flag-has_final = abap_true
+               AND ls_flag-has_error = abap_false
+               AND ls_flag-has_open = abap_false.
+              CONTINUE.
+            ENDIF.
+          ELSE.
+            CLEAR ls_flag.
+          ENDIF.
+
+          APPEND INITIAL LINE TO lt_result ASSIGNING <fs_result>.
+          <fs_result>-CompanyCode       = ls_delta-bukrs.
+          <fs_result>-InventoryDocument = ls_delta-inventorydocument.
+          <fs_result>-FiscalYear        = ls_delta-fiscalyear.
+          <fs_result>-Plant             = ls_delta-plant.
+          <fs_result>-Almacen           = ls_delta-almacen.
+          <fs_result>-DocumentDate      = ls_delta-documentdate.
+          <fs_result>-SyncStatusCode    = COND #( WHEN ls_flag-has_error = abap_true THEN 'CONTADO_ER' ELSE 'CONTADO' ).
+          <fs_result>-Nameupd           = ls_delta-nameupd.
+          <fs_result>-LastSyncAt        = ls_delta-lastsyncat.
+          <fs_result>-DeltaId           = ls_delta-deltaid.
+          <fs_result>-ErrorMessage      = ls_delta-errormessage.
+          <fs_result>-DocumentDateConta = ls_delta-documentdateconta.
+
+          READ TABLE lt_z_header INTO DATA(ls_z_header)
+            WITH TABLE KEY bukrs = ls_delta-bukrs
+                           iblnr = ls_delta-inventorydocument
+                           gjahr = ls_delta-fiscalyear.
+          IF sy-subrc = 0.
+            <fs_result>-Nameupd      = ls_z_header-last_sync_by.
+            <fs_result>-LastSyncAt   = ls_z_header-last_sync_at.
+            <fs_result>-DeltaId      = ls_z_header-delta_id.
+            <fs_result>-ErrorMessage = ls_z_header-error_message.
+            IF ls_z_header-budat IS NOT INITIAL.
+              <fs_result>-DocumentDateConta = ls_z_header-budat.
+            ENDIF.
+          ENDIF.
+        ENDLOOP.
 
         SORT lt_result BY companycode ASCENDING
                           inventorydocument ASCENDING
