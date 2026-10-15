@@ -92,7 +92,7 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
       <fs_flag>-z_count = <fs_flag>-z_count + 1.
       IF lv_status_up = 'CONTADO_EN'.
         <fs_flag>-has_final = abap_true.
-      ELSEIF lv_status_up = 'CONTADO_ER'.
+      ELSEIF lv_status_up = 'CONTADO_ER' OR lv_status_up = 'ENVIADO_ER'.
         <fs_flag>-has_error = abap_true.
       ELSEIF lv_status_up = 'CANCELADO' OR lv_status_up = 'CANCEL_ENV' OR lv_status_up = 'CANCEL_ERR'.
         <fs_flag>-has_cancel = abap_true.
@@ -106,7 +106,7 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
                        gjahr = ls_z-gjahr.
       IF sy-subrc <> 0.
         INSERT ls_z INTO TABLE lt_zinv_header.
-      ELSEIF lv_status_up = 'CONTADO_ER'.
+      ELSEIF lv_status_up = 'CONTADO_ER' OR lv_status_up = 'ENVIADO_ER'.
         <fs_header> = ls_z.
       ENDIF.
     ENDLOOP.
@@ -156,7 +156,7 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
       <fs_result>-Plant             = ls_d-plant.
       <fs_result>-Almacen           = ls_d-almacen.
       <fs_result>-DocumentDate      = ls_d-documentdate.
-      <fs_result>-SyncStatusCode    = COND #( WHEN ls_flag-has_error = abap_true THEN 'CONTADO_ER' ELSE 'CONTADO' ).
+      <fs_result>-SyncStatusCode    = 'CONTADO'.
       <fs_result>-Nameupd           = ls_d-nameupd.
       <fs_result>-LastSyncAt        = ls_d-lastsyncat.
       <fs_result>-DeltaId           = ls_d-deltaid.
@@ -172,6 +172,7 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
         <fs_result>-LastSyncAt   = ls_header-last_sync_at.
         <fs_result>-DeltaId      = ls_header-delta_id.
         <fs_result>-ErrorMessage = ls_header-error_message.
+        <fs_result>-SyncStatusCode = to_upper( ls_header-status ).
         IF ls_header-budat IS NOT INITIAL.
           <fs_result>-DocumentDateConta = ls_header-budat.
         ENDIF.
@@ -261,7 +262,7 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
       <fs_flag>-z_count = <fs_flag>-z_count + 1.
       IF lv_status_up = 'CONTADO_EN'.
         <fs_flag>-has_final = abap_true.
-      ELSEIF lv_status_up = 'CONTADO_ER'.
+      ELSEIF lv_status_up = 'CONTADO_ER' OR lv_status_up = 'ENVIADO_ER'.
         <fs_flag>-has_error = abap_true.
       ELSEIF lv_status_up = 'CANCELADO' OR lv_status_up = 'CANCEL_ENV' OR lv_status_up = 'CANCEL_ERR'.
         <fs_flag>-has_cancel = abap_true.
@@ -315,7 +316,7 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
           quantity          = ls_z-erfmg
           quantityzero      = ls_z-xnull
           baseunitofmeasure = ls_z-meins
-          syncstatuscode    = ls_z-status
+          syncstatuscode    = to_upper( ls_z-status )
           nameupd           = ls_z-last_sync_by
           lastsyncat        = ls_z-last_sync_at
           deltaid           = ls_z-delta_id
@@ -398,8 +399,6 @@ CLASS lhc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
                      severity = if_abap_behv_message=>severity-success
                      text     = ls_doc_msg-message ) ) ).
         ELSE.
-          failed-zi_mm_invent_closing_ship = VALUE #( BASE failed-zi_mm_invent_closing_ship (
-            %tky = lwa_keys-%tky ) ).
           reported-zi_mm_invent_closing_ship = VALUE #( BASE reported-zi_mm_invent_closing_ship (
             %tky = lwa_keys-%tky
             %msg = new_message_with_text(
@@ -604,12 +603,16 @@ CLASS lsc_ZI_MM_INVENT_CLOSING_SHIP IMPLEMENTATION.
     IF lt_insert IS NOT INITIAL.
       INSERT zinv_documentos FROM TABLE @lt_insert.
     ENDIF.
+
+    CLEAR lcl_buffer=>gt_zinv_update.
   ENDMETHOD.
 
   METHOD cleanup.
+    CLEAR lcl_buffer=>gt_zinv_update.
   ENDMETHOD.
 
   METHOD cleanup_finalize.
+    CLEAR lcl_buffer=>gt_zinv_update.
   ENDMETHOD.
 
 ENDCLASS.
