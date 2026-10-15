@@ -222,6 +222,27 @@ CLASS zcl_inv_clo_cpi IMPLEMENTATION.
             success               = abap_false
             message               = lv_message
           ) TO t_result.
+
+          ls_zinv = VALUE #(
+            bukrs         = <fs_doc>-bukrs
+            iblnr         = <fs_doc>-inventorydocument
+            gjahr         = <fs_doc>-fiscalyear
+            zeile         = <fs_doc>-item
+            werks         = <fs_doc>-plant
+            lgort         = <fs_doc>-almacen
+            matnr         = <fs_doc>-material
+            bldat         = <fs_doc>-documentdate
+            budat         = <fs_doc>-documentdateconta
+            erfmg         = <fs_doc>-quantity
+            xnull         = <fs_doc>-quantityzero
+            meins         = <fs_doc>-baseunitofmeasure
+            delta_id      = <fs_doc>-deltaid
+            status        = 'CONTADO_ER'
+            last_sync_at  = lv_timestamp_iso
+            last_sync_by  = sy-uname
+            error_message = lv_message
+          ).
+          APPEND ls_zinv TO t_zinv_update.
         ENDLOOP.
         ev_message = lv_message.
         RETURN.
