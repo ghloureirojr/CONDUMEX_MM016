@@ -111,7 +111,7 @@ CLASS zcl_mm_query_invent IMPLEMENTATION.
           <fs_flag>-z_count = <fs_flag>-z_count + 1.
           IF lv_status_up = 'CONTADO_EN'.
             <fs_flag>-has_final = abap_true.
-          ELSEIF lv_status_up = 'CONTADO_ER'.
+          ELSEIF lv_status_up = 'CONTADO_ER' OR lv_status_up = 'ENVIADO_ER'.
             <fs_flag>-has_error = abap_true.
           ELSEIF lv_status_up = 'CANCELADO' OR lv_status_up = 'CANCEL_ENV' OR lv_status_up = 'CANCEL_ERR'.
             <fs_flag>-has_cancel = abap_true.
@@ -125,7 +125,7 @@ CLASS zcl_mm_query_invent IMPLEMENTATION.
                            gjahr = ls_zdoc-gjahr.
           IF sy-subrc <> 0.
             INSERT ls_zdoc INTO TABLE lt_z_header.
-          ELSEIF lv_status_up = 'CONTADO_ER'.
+          ELSEIF lv_status_up = 'CONTADO_ER' OR lv_status_up = 'ENVIADO_ER'.
             <fs_z_header> = ls_zdoc.
           ENDIF.
         ENDLOOP.
@@ -178,7 +178,7 @@ CLASS zcl_mm_query_invent IMPLEMENTATION.
           <fs_result>-Plant             = ls_delta-plant.
           <fs_result>-Almacen           = ls_delta-almacen.
           <fs_result>-DocumentDate      = ls_delta-documentdate.
-          <fs_result>-SyncStatusCode    = COND #( WHEN ls_flag-has_error = abap_true THEN 'CONTADO_ER' ELSE 'CONTADO' ).
+          <fs_result>-SyncStatusCode    = 'CONTADO'.
           <fs_result>-Nameupd           = ls_delta-nameupd.
           <fs_result>-LastSyncAt        = ls_delta-lastsyncat.
           <fs_result>-DeltaId           = ls_delta-deltaid.
@@ -194,6 +194,7 @@ CLASS zcl_mm_query_invent IMPLEMENTATION.
             <fs_result>-LastSyncAt   = ls_z_header-last_sync_at.
             <fs_result>-DeltaId      = ls_z_header-delta_id.
             <fs_result>-ErrorMessage = ls_z_header-error_message.
+            <fs_result>-SyncStatusCode = to_upper( ls_z_header-status ).
             IF ls_z_header-budat IS NOT INITIAL.
               <fs_result>-DocumentDateConta = ls_z_header-budat.
             ENDIF.
