@@ -154,9 +154,7 @@ CLASS zcl_mm_query_invent_item IMPLEMENTATION.
         IF lv_item_status = 'CONTADO_EN'.
           CONTINUE.
         ENDIF.
-        IF lv_item_status = 'CONTADO_ER'.
-          lv_sync = 'CONTADO_ER'.
-        ENDIF.
+        lv_sync = lv_item_status.
       ENDIF.
 
       INSERT VALUE #(
