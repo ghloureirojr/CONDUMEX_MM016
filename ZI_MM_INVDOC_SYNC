@@ -27,3 +27,5 @@ define view entity ZI_MM_INVDOC_SYNC
 where upper(status) = 'CONTADO'
    or upper(status) = 'CONTADO_ER'
    or upper(status) = 'CONTADO_EN'
+   or upper(status) = 'PENDIENTE'
+   or upper(status) = 'ENVIADO_ER'
